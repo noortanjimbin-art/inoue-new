@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS videos (
   size    INTEGER DEFAULT 0,
   added   INTEGER NOT NULL,
   thumb   TEXT,                          -- base64 JPEG data URL
-  r2_key  TEXT                           -- object key in inouee-annotation-videos
+  r2_key  TEXT                           -- object key in inoue-new-videos
 );
 
 CREATE TABLE IF NOT EXISTS tasks (

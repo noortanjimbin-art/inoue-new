@@ -10,7 +10,7 @@ Admins upload videos, assign tasks, and track coverage.
 | Auth | **Cloudflare Access** (Zero Trust) — no passwords in this codebase |
 | App + API | Cloudflare Workers (`worker/`), static tool served from `public/` |
 | Data | Cloudflare D1 (`schema.sql`) |
-| Video files | Cloudflare R2 — bucket `inouee-annotation-videos` |
+| Video files | Cloudflare R2 — bucket `inoue-new-videos` |
 | Deploy | GitHub → Cloudflare Workers Builds (push to `main` deploys) |
 
 Everything except GitHub lives in one Cloudflare account: one bill, one dashboard,

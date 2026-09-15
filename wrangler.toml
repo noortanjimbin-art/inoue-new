@@ -11,7 +11,7 @@ not_found_handling = "single-page-application"
 # Video files. 500 MB uploads go through multipart on this binding.
 [[r2_buckets]]
 binding = "VIDEOS"
-bucket_name = "inouee-annotation-videos"
+bucket_name = "inoue-new-videos"
 
 # users / videos / tasks / anns — replaces the artifact `db` capability.
 [[d1_databases]]
