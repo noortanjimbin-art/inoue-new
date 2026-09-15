@@ -280,7 +280,7 @@ ja:{
  pass:'パスワード', role:'権限', admin:'管理者', annotator:'アノテーター', signinBtn:'🔑 サインイン', createBtn:'アカウントを作成',
  demo:'はじめての方は「アカウント作成」から自分のメールアドレスで登録できます（承認は不要）。<br>管理者アカウント <code>admin@anosupo.jp</code>。パスワードは任意の文字列で構いません。',
  eNeed:'メールアドレスとパスワードを入力してください', eName:'氏名を入力してください',
- eDup:'このメールアドレスは登録済みです', forgot:'パスワードをお忘れですか？', fSent:'再設定リンクをメールで送信しました。メールをご確認ください。', fAsk:'登録済みのメールアドレスを入力してください', fNew:'新しいパスワードを入力してください（6文字以上）', fDone:'パスワードを更新しました。サインインしてください。', eNoAcc:'アカウントが見つかりません。アカウント作成から登録してください',
+ eDup:'このメールアドレスは登録済みです', eSelfReg:'アノテーターはご自身でアカウント登録する必要があります。登録後、この画面で権限を変更できます。', forgot:'パスワードをお忘れですか？', fSent:'再設定リンクをメールで送信しました。メールをご確認ください。', fAsk:'登録済みのメールアドレスを入力してください', fNew:'新しいパスワードを入力してください（6文字以上）', fDone:'パスワードを更新しました。サインインしてください。', eNoAcc:'アカウントが見つかりません。アカウント作成から登録してください',
  logout:'ログアウト', langBtn:'🌐 English',
  dashSub:'プロジェクト全体の進捗', totalTasks:'タスク総数', doneRate:'完了率', segCount:'アノテーション数', segTime:'アノテーション総時間',
  dDone:'完了', dDoing:'作業中', dTodo:'未着手', ofTasks:'全{n}タスク中 {d}件', recSeg:'記録された作業区間', sumLen:'区間の合計長',
@@ -329,7 +329,7 @@ en:{
  pass:'Password', role:'Role', admin:'Admin', annotator:'Annotator', signinBtn:'🔑 Sign In', createBtn:'Create Account',
  demo:'New here? Register your own email with "Create Account" — no approval needed.<br>Admin account <code>admin@anosupo.jp</code>. Any password works.',
  eNeed:'Enter your email and password', eName:'Enter a name',
- eDup:'That email is already registered', forgot:'Forgot your password?', fSent:'Reset link sent. Check your email.', fAsk:'Enter your registered email address first', fNew:'Enter a new password (6+ characters)', fDone:'Password updated. Please sign in.', eNoAcc:'No account found. Please create one first',
+ eDup:'That email is already registered', eSelfReg:'Annotators must register their own account first. Once they have signed in, you can change their role here.', forgot:'Forgot your password?', fSent:'Reset link sent. Check your email.', fAsk:'Enter your registered email address first', fNew:'Enter a new password (6+ characters)', fDone:'Password updated. Please sign in.', eNoAcc:'No account found. Please create one first',
  logout:'Sign out', langBtn:'🌐 日本語',
  dashSub:'Overall project progress', totalTasks:'Tasks', doneRate:'Completion', segCount:'Annotations', segTime:'Annotated time',
  dDone:'Done', dDoing:'In progress', dTodo:'Not started', ofTasks:'{d} of {n} tasks', recSeg:'Recorded work segments', sumLen:'Total segment length',
@@ -415,6 +415,13 @@ function api(path, opts){
    pushes a role change. A local-only row has no server side to patch. */
 function wUser(u){
   if(!CLOUD) return save();
+  /* Supabase owns identity: a row only exists once its owner has signed in at
+     least once. A locally-invented id has no server side to patch, so say so
+     rather than failing silently and letting the next pull() erase the row. */
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(String(u.id))){
+    alert(t('eSelfReg'));
+    return pull();
+  }
   api('users', {method:'PATCH', body:{ id:u.id, role:u.role }}).then(pull).catch(cerr);
 }
 function dUser(id){
@@ -477,14 +484,21 @@ function pull(){
                status:x.status, created:x.created, updated:x.updated }; });
     if(me) DB.users.forEach(function(u){ if(u.id===me.id) me=u; });
 
-    return Promise.all(DB.tasks.map(function(x){
-      /* Skip the open task so a live edit is not clobbered by its own echo. */
-      if(W.task && W.task.id===x.id) return null;
-      return api('anns?task=' + x.id).then(function(items){
-        DB.anns[x.id] = (items||[]).map(function(a){
-          return { start:a.t_start, end:a.t_end, caption:a.caption||'', at:a.at }; });
-      }).catch(function(){});
-    }));
+    /* One request for every annotation the caller can see. Fetching per task
+       meant 3+N requests every 5 seconds, which scaled straight into Vercel's
+       invocation limits once a few dozen tasks existed. */
+    return api('anns').then(function(rows){
+      var byTask={};
+      (rows||[]).forEach(function(a){
+        (byTask[a.task_id] = byTask[a.task_id] || []).push(
+          { start:a.t_start, end:a.t_end, caption:a.caption||'', at:a.at });
+      });
+      DB.tasks.forEach(function(x){
+        /* Skip the open task so a live edit is not clobbered by its own echo. */
+        if(W.task && W.task.id===x.id) return;
+        DB.anns[x.id] = byTask[x.id] || [];
+      });
+    }).catch(function(){});
   }).then(refresh).catch(cerr);
 }
 
@@ -1143,7 +1157,7 @@ function wire(){
   if((el=$('addTask'))) el.onclick=function(){
     var vid2=$('kVideo').value,u=$('kUser').value;
     if(!vid2||!u){ alert(t('ePickVU')); return; }
-    var nt={id:uid('t'),videoId:vid2,userId:u,status:'todo',created:new Date().toISOString().slice(0,10),updated:Date.now()};
+    var nt={id:uid('t'),videoId:vid2,userId:u,status:'todo',created:new Date().toISOString().slice(0,10),updated:Date.now(),_new:true};
     DB.tasks.push(nt); wTask(nt); render();
   };
   if((el=$('exRefresh'))) el.onclick=exRender;
