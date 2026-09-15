@@ -196,6 +196,9 @@ tr:last-child td{border-bottom:none}
         <button type="button" class="peye" id="pEye" aria-label="show password">👁</button></div></div>
       <div class="err" id="lErr"></div>
       <button class="primary" id="lGo" style="height:38px">🔑 サインイン</button>
+      <button type="button" id="lForgot"
+        style="background:none;border:0;color:var(--accent);font-size:12px;cursor:pointer;padding:6px 0;text-decoration:underline">
+        パスワードをお忘れですか？</button>
     </div>
     <div class="demo" id="demoBox"></div>
   </div>
@@ -277,7 +280,7 @@ ja:{
  pass:'パスワード', role:'権限', admin:'管理者', annotator:'アノテーター', signinBtn:'🔑 サインイン', createBtn:'アカウントを作成',
  demo:'はじめての方は「アカウント作成」から自分のメールアドレスで登録できます（承認は不要）。<br>管理者アカウント <code>admin@anosupo.jp</code>。パスワードは任意の文字列で構いません。',
  eNeed:'メールアドレスとパスワードを入力してください', eName:'氏名を入力してください',
- eDup:'このメールアドレスは登録済みです', eNoAcc:'アカウントが見つかりません。アカウント作成から登録してください',
+ eDup:'このメールアドレスは登録済みです', forgot:'パスワードをお忘れですか？', fSent:'再設定リンクをメールで送信しました。メールをご確認ください。', fAsk:'登録済みのメールアドレスを入力してください', fNew:'新しいパスワードを入力してください（6文字以上）', fDone:'パスワードを更新しました。サインインしてください。', eNoAcc:'アカウントが見つかりません。アカウント作成から登録してください',
  logout:'ログアウト', langBtn:'🌐 English',
  dashSub:'プロジェクト全体の進捗', totalTasks:'タスク総数', doneRate:'完了率', segCount:'アノテーション数', segTime:'アノテーション総時間',
  dDone:'完了', dDoing:'作業中', dTodo:'未着手', ofTasks:'全{n}タスク中 {d}件', recSeg:'記録された作業区間', sumLen:'区間の合計長',
@@ -326,7 +329,7 @@ en:{
  pass:'Password', role:'Role', admin:'Admin', annotator:'Annotator', signinBtn:'🔑 Sign In', createBtn:'Create Account',
  demo:'New here? Register your own email with "Create Account" — no approval needed.<br>Admin account <code>admin@anosupo.jp</code>. Any password works.',
  eNeed:'Enter your email and password', eName:'Enter a name',
- eDup:'That email is already registered', eNoAcc:'No account found. Please create one first',
+ eDup:'That email is already registered', forgot:'Forgot your password?', fSent:'Reset link sent. Check your email.', fAsk:'Enter your registered email address first', fNew:'Enter a new password (6+ characters)', fDone:'Password updated. Please sign in.', eNoAcc:'No account found. Please create one first',
  logout:'Sign out', langBtn:'🌐 日本語',
  dashSub:'Overall project progress', totalTasks:'Tasks', doneRate:'Completion', segCount:'Annotations', segTime:'Annotated time',
  dDone:'Done', dDoing:'In progress', dTodo:'Not started', ofTasks:'{d} of {n} tasks', recSeg:'Recorded work segments', sumLen:'Total segment length',
@@ -736,6 +739,39 @@ function enter(u){
   buildNav(); go(u.role==='admin'?'dash':'tasks'); applyLang();
 }
 
+/* Password reset. Supabase mails a recovery link; the new password is typed by
+   the user on return and never passes through this app's own storage. */
+$('lForgot').onclick=function(){
+  var em=$('lEmail').value.trim().toLowerCase();
+  if(!em){ $('lErr').textContent=t('fAsk'); $('lEmail').focus(); return; }
+  if(!SB){ $('lErr').textContent=t('fAsk'); return; }
+  $('lErr').textContent='...';
+  SB.auth.resetPasswordForEmail(em, { redirectTo: location.origin })
+    .then(function(r){
+      /* Supabase reports success even for an unknown address, so that this form
+         cannot be used to discover who has an account. */
+      $('lErr').textContent = (r && r.error) ? (r.error.message||String(r.error)) : t('fSent');
+    })
+    .catch(function(e){ $('lErr').textContent=(e && e.message)||String(e); });
+};
+
+/* Returning from the emailed link: supabase-js consumes the token in the URL and
+   fires PASSWORD_RECOVERY, at which point a new password can be set. */
+function askNewPassword(){
+  var pw = prompt(t('fNew'));
+  if(pw===null) return;
+  if(pw.length<6){ return askNewPassword(); }
+  SB.auth.updateUser({ password: pw }).then(function(r){
+    if(r.error){ alert(r.error.message||String(r.error)); return askNewPassword(); }
+    return SB.auth.signOut().then(function(){
+      TOKEN=null; me=null;
+      history.replaceState(null,'',location.pathname);
+      showLogin();
+      $('lErr').textContent=t('fDone');
+    });
+  }).catch(function(e){ alert((e && e.message)||String(e)); });
+}
+
 /* ================= language ================= */
 function setLang(l){
   lang=l; try{ localStorage.setItem('anno_lang',l); }catch(e){}
@@ -750,6 +786,7 @@ function applyLang(){
   $('lTitle').textContent=t('appName'); $('tSignin').textContent=t('signin'); $('tSignup').textContent=t('signup');
   $('labName').textContent=t('name'); $('labEmail').textContent=t('email'); $('labPass').textContent=t('pass');
   $('lGo').textContent=(mode==='up'?t('createBtn'):t('signinBtn'));
+  if($('lForgot')) $('lForgot').textContent=t('forgot');
   $('demoBox').innerHTML=t('demo');
   /* app */
   $('brandName').textContent=t('appName'); $('logout').textContent=t('logout');
@@ -1364,6 +1401,9 @@ function boot(u){
     if(!window.supabase){ return fallback(); }
 
     SB = window.supabase.createClient(c.supabaseUrl, c.supabaseAnonKey);
+    SB.auth.onAuthStateChange(function(ev){
+      if(ev === 'PASSWORD_RECOVERY'){ showLogin(); askNewPassword(); }
+    });
     return SB.auth.getSession().then(function(g){
       started = true;
       var sess = g && g.data && g.data.session;
