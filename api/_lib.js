@@ -13,9 +13,14 @@ export function missingEnv() {
 }
 
 // Service-role client. Never expose this key to the browser: it bypasses RLS.
+// The tool's tables live in their own `inoue_new` schema, not `public`, so they
+// cannot collide with the annotation tables already in this project.
+export const SCHEMA = 'inoue_new';
+
 export const admin = () =>
   createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), {
     auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: SCHEMA },
   });
 
 export const r2 = () =>

@@ -9,7 +9,7 @@ Admins upload videos, assign tasks, and track coverage.
 |---|---|
 | Hosting + API | Vercel (`api/*.js` serverless functions, static `public/`) |
 | Auth | **Supabase Auth** (email + password) |
-| Data | Supabase Postgres (`supabase-schema.sql`) |
+| Data | Supabase Postgres — `inoue_new` schema (`supabase-schema.sql`) |
 | Video files | Cloudflare R2 — bucket `inoue-new-videos`, via the S3 API |
 
 This mirrors the INOUE Tool stack (Next.js + Supabase + R2) rather than
@@ -51,11 +51,17 @@ needs a CORS policy, because the upload PUT comes from the browser.
 
 ## Setup
 
-### 1. Supabase
+### 1. Supabase — already done
 
-Create a project, then run [`supabase-schema.sql`](supabase-schema.sql) in the SQL
-editor. From **Settings → API** collect the project URL, the `anon` key, and the
-`service_role` key.
+The schema is applied. It lives in an isolated **`inoue_new`** schema inside the
+existing `inoe-annotation` project (`svenzdtasbmhogowknws`), because that
+project's `public` schema already holds unrelated videos/clips/annotations
+tables that would otherwise collide.
+
+One dashboard step remains: **Settings → API → Exposed schemas**, add
+`inoue_new`. PostgREST will not serve the schema until it is listed there.
+
+Then collect the `service_role` key from **Settings → API**.
 
 ### 2. Cloudflare R2
 
