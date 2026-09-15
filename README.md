@@ -7,87 +7,116 @@ Admins upload videos, assign tasks, and track coverage.
 
 | Concern | Choice |
 |---|---|
-| Auth | **Cloudflare Access** (Zero Trust) — no passwords in this codebase |
-| App + API | Cloudflare Workers (`worker/`), static tool served from `public/` |
-| Data | Cloudflare D1 (`schema.sql`) |
-| Video files | Cloudflare R2 — bucket `inoue-new-videos` |
-| Deploy | GitHub → Cloudflare Workers Builds (push to `main` deploys) |
+| Hosting + API | Vercel (`api/*.js` serverless functions, static `public/`) |
+| Auth | **Supabase Auth** (email + password) |
+| Data | Supabase Postgres (`supabase-schema.sql`) |
+| Video files | Cloudflare R2 — bucket `inoue-new-videos`, via the S3 API |
 
-Everything except GitHub lives in one Cloudflare account: one bill, one dashboard,
-one set of logs.
+This mirrors the INOUE Tool stack (Next.js + Supabase + R2) rather than
+introducing a new one.
 
-## Why Cloudflare Access for auth
+## Why Supabase Auth
 
-The previous single-file version had no password check at all — sign-in only
-verified the email existed, so any string worked, and registration was open to
-anyone with the link (see `docs/HANDOFF.md` §7).
+The single-file version had no password check at all — sign-in only verified the
+email existed, so any string worked, and registration was open to anyone with the
+link (`docs/HANDOFF.md` §7). Supabase Auth replaces that with real credentials,
+hashed server-side, plus email confirmation if you enable it.
 
-Access fixes all of that without adding auth code to maintain:
+The split that matters: **Supabase Auth decides who gets in, the `users` table
+decides what they can do.** Roles stay `admin` / `annotator`. The first account to
+register becomes admin (`first_user_is_admin` trigger); everyone after is an
+annotator until an admin promotes them, and nobody can change their own role, so
+the team cannot be locked out.
 
-- Login happens **before** a request reaches the Worker. Google Workspace SSO, or
-  one-time PIN to an email address on an allowlist.
-- No password is ever stored, hashed, reset, or leaked here.
-- Revoking an annotator is removing their email from one policy.
-- Free for up to 50 users.
+API routes use the **service-role key server-side only** and enforce the rules
+themselves. RLS is enabled with no public policies, so the anon key alone reaches
+nothing.
 
-The Worker still verifies the signed `Cf-Access-Jwt-Assertion` header
-(`worker/access.js`) rather than trusting it blindly — otherwise anything that
-reached the Worker origin directly could forge an identity.
+> If you later want to drop passwords entirely, Cloudflare Access in front of a
+> Workers deployment does that — but it is Workers-only and does not apply to a
+> Vercel deployment.
 
-Access decides **who gets in**. The `users` table decides **what they can do**
-once inside (`admin` vs `annotator`). The first person to sign in becomes admin;
-everyone after is an annotator until an admin promotes them.
+## Why the video path looks the way it does
 
-## Video files
+Vercel caps both request and response bodies at **4.5 MB**, so a 500 MB video can
+never pass through a function. Instead:
 
-Upload and playback both proxy through the Worker, so the browser only ever
-talks to its own origin:
+- **Upload** — `POST /api/upload` returns a presigned PUT; the browser uploads
+  straight to R2.
+- **Playback** — `GET /api/stream?key=…&json=1` returns a presigned GET; the
+  browser makes its own Range requests to R2, so seeking works.
 
-- **No R2 CORS policy to configure** and no presigned URLs that can leak.
-- 500 MB uploads use R2 multipart (`/api/upload/create` → `part` → `complete`),
-  which removes the 20 MB ceiling that was blocking the old version.
-- `/api/stream/<key>` honours HTTP Range, so seeking in `<video>` works.
+This removes the 20 MB ceiling from `docs/HANDOFF.md` §9. The cost is that R2
+needs a CORS policy, because the upload PUT comes from the browser.
 
 ## Setup
 
-Run once, from a machine with Node installed (this project's dev machine has
-none — see "Deploying without Node" below).
+### 1. Supabase
 
-```bash
-npm install -g wrangler
-wrangler login
+Create a project, then run [`supabase-schema.sql`](supabase-schema.sql) in the SQL
+editor. From **Settings → API** collect the project URL, the `anon` key, and the
+`service_role` key.
 
-wrangler d1 create inouee-annotation          # paste database_id into wrangler.toml
-wrangler d1 execute inouee-annotation --remote --file=./schema.sql
-wrangler deploy
+### 2. Cloudflare R2
+
+The bucket `inoue-new-videos` already exists. You need two things:
+
+**An S3 API token** — R2 → Manage API Tokens → Create, with Object Read & Write
+on that bucket. Note the Access Key ID and Secret Access Key.
+
+**A CORS policy** on the bucket, or browser uploads will fail:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://<your-vercel-domain>"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["content-type"],
+    "ExposeHeaders": ["etag"],
+    "MaxAgeSeconds": 3600
+  }
+]
 ```
 
-Then in the Cloudflare dashboard, **Zero Trust → Access → Applications**:
+### 3. Vercel environment variables
 
-1. Add a self-hosted application pointing at the deployed Worker's hostname.
-2. Add a policy: Allow → Emails / Email domain → your annotators.
-3. Copy the application's **AUD tag** into `ACCESS_AUD` in `wrangler.toml`, and
-   your team name (the `<team>` in `<team>.cloudflareaccess.com`) into
-   `ACCESS_TEAM`. Redeploy.
+Settings → Environment Variables:
 
-### Deploying without Node
+| Variable | From |
+|---|---|
+| `SUPABASE_URL` | Supabase → Settings → API |
+| `SUPABASE_ANON_KEY` | same |
+| `SUPABASE_SERVICE_ROLE_KEY` | same — **secret** |
+| `R2_ACCOUNT_ID` | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | R2 API token |
+| `R2_SECRET_ACCESS_KEY` | R2 API token — **secret** |
+| `R2_BUCKET` | `inoue-new-videos` |
 
-Workers Builds compiles in Cloudflare's cloud, so no local toolchain is needed:
-**Workers & Pages → the Worker → Settings → Build → Connect to Git**, pick this
-repo, and every push to `main` deploys. The one-time `d1 create` above still
-needs either Node or the dashboard's D1 console.
+Redeploy after adding them. Until they are all set the app shows a "Setup
+required" screen listing what is missing, rather than failing obscurely.
 
 ## Layout
 
 ```
-public/index.html   the annotation tool (single file, no build step)
-worker/index.js     API routes: users, videos, tasks, anns, upload, stream
-worker/access.js    Access JWT verification and identity → users row
-schema.sql          D1 tables
-docs/HANDOFF.md     history, keyboard shortcuts, layout rules, known issues
+public/index.html      the annotation tool (single file, no build step)
+api/_lib.js            auth check, Supabase service client, R2 client
+api/config.js          public bootstrap: Supabase URL + anon key, readiness
+api/me.js              current user, created on first sign-in
+api/users.js           list, promote/demote, delete
+api/videos.js          list, create, delete (also removes the R2 object)
+api/tasks.js           list (scoped by role), create, patch, delete
+api/anns.js            read and whole-list replace for one task
+api/upload.js          presigned PUT to R2
+api/stream.js          presigned GET from R2
+supabase-schema.sql    tables, RLS, first-admin trigger
+docs/HANDOFF.md        history, keyboard shortcuts, layout rules
 ```
 
-`public/index.html` is still the artifact-era build and talks to the artifact
-`db`/`assets` capabilities. Porting its `w*`/`d*` storage helpers to `fetch('/api/…')`
-is the next step; the annotation logic, shortcuts, layout and i18n above that
-layer are storage-agnostic and carry over unchanged (`docs/HANDOFF.md` §8).
+## Known gaps
+
+- **Polling, not realtime.** `pull()` refreshes every 5s and fetches annotations
+  per task (N+1). Fine for a small team; swap to Supabase Realtime if it grows.
+- **Admins cannot pre-create annotator accounts.** Supabase owns identity, so
+  annotators self-register and an admin promotes them. The Team tab's add-member
+  control no longer persists.
+- **Not yet exercised end to end** against a live Supabase project or R2 token.

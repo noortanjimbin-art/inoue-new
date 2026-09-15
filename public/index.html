@@ -263,6 +263,7 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
 "use strict";
@@ -389,18 +390,58 @@ function load(){
 function save(){ if(CLOUD) return; try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} }
 
 /* ================= shared store (db + assets) ================= */
-var CLOUD=false, DBC=null, ASSETS=null, ASSET_MAX=20*1024*1024;
-function cerr(){}
-function wUser(u){ if(CLOUD&&DBC) DBC.doc('users/'+u.id).set({name:u.name,email:u.email,role:u.role}).catch(cerr); else save(); }
-function dUser(id){ if(CLOUD&&DBC) DBC.doc('users/'+id).delete().catch(cerr); else save(); }
-function wVideo(v){ if(CLOUD&&DBC) DBC.doc('videos/'+v.id).set({name:v.name,dur:v.dur||0,size:v.size||0,
-    added:v.added,thumb:v.thumb||'',assetId:v.assetId||''}).catch(cerr); else save(); }
-function dVideo(id){ if(CLOUD&&DBC) DBC.doc('videos/'+id).delete().catch(cerr); else save(); }
-function wTask(x){ if(CLOUD&&DBC) DBC.doc('tasks/'+x.id).set({videoId:x.videoId,userId:x.userId||'',
-    status:x.status,created:x.created,updated:x.updated||0}).catch(cerr); else save(); }
-function dTask(id){ if(CLOUD&&DBC) DBC.doc('tasks/'+id).delete().catch(cerr); else save(); }
-function wAnns(tid,items){ if(CLOUD&&DBC) DBC.doc('anns/'+tid).set({items:items}).catch(cerr); else save(); }
-function dAnns(tid){ if(CLOUD&&DBC) DBC.doc('anns/'+tid).delete().catch(cerr); }
+var CLOUD=false, SB=null, TOKEN=null;
+function cerr(e){ if(e) console.warn(e); }
+
+function api(path, opts){
+  opts = opts || {};
+  var h = { 'content-type':'application/json' };
+  if(TOKEN) h['authorization'] = 'Bearer ' + TOKEN;
+  return fetch('/api/' + path, {
+    method: opts.method || 'GET', headers: h,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  }).then(function(r){
+    return r.json().catch(function(){ return null; }).then(function(j){
+      if(!r.ok) throw (j && j.error) || ('HTTP ' + r.status);
+      return j;
+    });
+  });
+}
+
+/* Annotator accounts are created by self-registration, so wUser only ever
+   pushes a role change. A local-only row has no server side to patch. */
+function wUser(u){
+  if(!CLOUD) return save();
+  api('users', {method:'PATCH', body:{ id:u.id, role:u.role }}).then(pull).catch(cerr);
+}
+function dUser(id){
+  if(!CLOUD) return save();
+  api('users?id=' + id, {method:'DELETE'}).then(pull).catch(cerr);
+}
+/* Video rows are written by upload(); nothing else mutates them. */
+function wVideo(v){ if(!CLOUD) return save(); }
+function dVideo(id){
+  if(!CLOUD) return save();
+  api('videos?id=' + id, {method:'DELETE'}).then(pull).catch(cerr);
+}
+function wTask(x){
+  if(!CLOUD) return save();
+  if(x._new){ delete x._new;
+    return api('tasks', {method:'POST', body:{ video_id:x.videoId, user_id:x.userId||null, status:x.status }})
+      .then(pull).catch(cerr);
+  }
+  api('tasks', {method:'PATCH', body:{ id:x.id, status:x.status, user_id:x.userId||null }})
+    .then(pull).catch(cerr);
+}
+function dTask(id){
+  if(!CLOUD) return save();
+  api('tasks?id=' + id, {method:'DELETE'}).then(pull).catch(cerr);
+}
+function wAnns(tid, items){
+  if(!CLOUD) return save();
+  api('anns?task=' + tid, {method:'PUT', body:{ items: items }}).catch(cerr);
+}
+function dAnns(tid){ /* rows cascade with the task */ }
 
 var rTimer=null;
 function refresh(){
@@ -416,44 +457,40 @@ function refresh(){
     }
   },120);
 }
+
+/* Server rows are snake_case; every view above this line expects the original
+   camelCase shape, so the mapping happens here and nowhere else. */
+function pull(){
+  if(!CLOUD || !TOKEN) return Promise.resolve();
+  return Promise.all([ api('users'), api('videos'), api('tasks') ]).then(function(r){
+    DB.users = (r[0]||[]).map(function(u){
+      return { id:u.id, name:u.name, email:u.email, role:u.role }; });
+    DB.videos = (r[1]||[]).map(function(v){
+      STORED[v.id]=true;
+      return { id:v.id, name:v.name, dur:v.dur||0, size:v.size||0,
+               added:String(v.added||'').slice(0,10), thumb:v.thumb||null, assetId:v.r2_key||'' }; });
+    DB.tasks = (r[2]||[]).map(function(x){
+      return { id:x.id, videoId:x.video_id, userId:x.user_id||null,
+               status:x.status, created:x.created, updated:x.updated }; });
+    if(me) DB.users.forEach(function(u){ if(u.id===me.id) me=u; });
+
+    return Promise.all(DB.tasks.map(function(x){
+      /* Skip the open task so a live edit is not clobbered by its own echo. */
+      if(W.task && W.task.id===x.id) return null;
+      return api('anns?task=' + x.id).then(function(items){
+        DB.anns[x.id] = (items||[]).map(function(a){
+          return { start:a.t_start, end:a.t_end, caption:a.caption||'', at:a.at }; });
+      }).catch(function(){});
+    }));
+  }).then(refresh).catch(cerr);
+}
+
 function startCloud(cb){
-  CLOUD=true;
-  var seen=0, need=4, fired=false;
-  function first(){ if(++seen>=need&&!fired){ fired=true; cb(); } }
-  setTimeout(function(){ if(!fired){ fired=true; cb(); } },7000);
-
-  DBC.collection('users').onSnapshot(function(s){
-    DB.users=s.docs.map(function(d){ var b=d.data()||{}; return {id:d.id,name:b.name,email:b.email,role:b.role}; });
-    if(me){ var m=null; DB.users.forEach(function(u){ if(u.id===me.id) m=u; }); if(m) me=m; }
-    first(); refresh();
-  },cerr);
-
-  DBC.collection('videos').onSnapshot(function(s){
-    DB.videos=s.docs.map(function(d){ var b=d.data()||{};
-      if(b.assetId) STORED[d.id]=true;
-      return {id:d.id,name:b.name,dur:b.dur||0,size:b.size||0,added:b.added,thumb:b.thumb||null,assetId:b.assetId||''}; });
-    first(); refresh();
-  },cerr);
-
-  DBC.collection('tasks').onSnapshot(function(s){
-    DB.tasks=s.docs.map(function(d){ var b=d.data()||{};
-      return {id:d.id,videoId:b.videoId,userId:b.userId||null,status:b.status||'todo',created:b.created,updated:b.updated||0}; });
-    first(); refresh();
-  },cerr);
-
-  DBC.collection('anns').onSnapshot(function(s){
-    var next={};
-    s.docs.forEach(function(d){ var b=d.data()||{}; next[d.id]=b.items||[]; });
-    if(W.task && next[W.task.id]) next[W.task.id]=DB.anns[W.task.id]||next[W.task.id];
-    DB.anns=next;
-    first(); refresh();
-  },cerr);
+  CLOUD = true;
+  pull().then(function(){ cb && cb(); });
+  setInterval(pull, 5000);
 }
-function ensureAdmin(){
-  if(!CLOUD||!DBC) return;
-  if(DB.users.length) return;
-  DBC.doc('users/u1').set({name:'Admin',email:'admin@anosupo.jp',role:'admin'}).catch(cerr);
-}
+function ensureAdmin(){ /* handled by the first_user_is_admin trigger */ }
 function seed(){
   DB={
     users:[{id:'u1',name:'Admin',email:'admin@anosupo.jp',role:'admin'}],
@@ -528,7 +565,13 @@ function idbKeys(cb){
 function ensureFile(vidId,cb){
   if(FILES[vidId]) return cb(FILES[vidId]);
   var v=videoById(vidId);
-  if(v&&v.assetId){ var u='/_blob/'+v.assetId; FILES[vidId]=u; return cb(u); }
+  if(CLOUD && v && v.assetId){
+    /* A presigned R2 URL is handed straight to <video src>, so the browser makes
+       its own Range requests to R2 and seeking works without a proxy. */
+    return api('stream?json=1&key=' + encodeURIComponent(v.assetId)).then(function(r){
+      FILES[vidId]=r.url; cb(r.url);
+    }).catch(function(){ cb(null); });
+  }
   idbGet(vidId,function(blob){
     if(!blob) return cb(null);
     var u=URL.createObjectURL(blob); FILES[vidId]=u; cb(u);
@@ -633,19 +676,45 @@ $('tSignup').onclick=function(){ mode='up'; this.classList.add('on'); $('tSignin
 $('lGo').onclick=function(){
   var em=$('lEmail').value.trim().toLowerCase(), pw=$('lPass').value;
   if(!em||!pw){ $('lErr').textContent=t('eNeed'); return; }
+
+  if(!CLOUD||!SB){          /* offline preview: the old local-only behaviour */
+    if(mode==='up'){
+      var nm0=$('lName').value.trim();
+      if(!nm0){ $('lErr').textContent=t('eName'); return; }
+      for(var i0=0;i0<DB.users.length;i0++) if(DB.users[i0].email===em){ $('lErr').textContent=t('eDup'); return; }
+      var u0={id:uid('u'),name:nm0,email:em,role:'annotator'};
+      DB.users.push(u0); save(); enter(u0); return;
+    }
+    var f0=null;
+    for(var j0=0;j0<DB.users.length;j0++) if(DB.users[j0].email===em){ f0=DB.users[j0]; break; }
+    if(!f0){ $('lErr').textContent=t('eNoAcc'); return; }
+    enter(f0); return;
+  }
+
+  $('lErr').textContent='...';
+  var work;
   if(mode==='up'){
     var nm=$('lName').value.trim();
     if(!nm){ $('lErr').textContent=t('eName'); return; }
-    for(var i=0;i<DB.users.length;i++) if(DB.users[i].email===em){ $('lErr').textContent=t('eDup'); return; }
-    var u={id:uid('u'),name:nm,email:em,role:'annotator'};
-    DB.users.push(u); wUser(u); enter(u); return;
+    work=SB.auth.signUp({ email:em, password:pw, options:{ data:{ name:nm } } });
+  } else {
+    work=SB.auth.signInWithPassword({ email:em, password:pw });
   }
-  var found=null;
-  for(var j=0;j<DB.users.length;j++) if(DB.users[j].email===em){ found=DB.users[j]; break; }
-  if(!found){ $('lErr').innerHTML=esc(t('eNoAcc'))+' <a href="#" id="toSignup">'+esc(t('signup'))+'</a>';
-    var a=$('toSignup'); if(a) a.onclick=function(e){ e.preventDefault(); $('tSignup').click(); $('lName').focus(); };
-    return; }
-  enter(found);
+
+  work.then(function(r){
+    if(r.error) throw r.error;
+    if(!r.data.session){
+      /* Supabase is set to confirm addresses before the first sign-in. */
+      $('lErr').textContent='Check your email to confirm your account, then sign in.';
+      return;
+    }
+    TOKEN=r.data.session.access_token;
+    return api('me').then(function(u){
+      return pull().then(function(){ $('lErr').textContent=''; enter(u); });
+    });
+  }).catch(function(e){
+    $('lErr').textContent=(e && (e.message||e.error_description)) || String(e);
+  });
 };
 $('pEye').onclick=function(){
   var i=$('lPass'), on=i.type==='password';
@@ -655,7 +724,12 @@ $('pEye').onclick=function(){
   i.focus();
 };
 $('lPass').addEventListener('keydown',function(e){ if(e.key==='Enter') $('lGo').click(); });
-$('logout').onclick=function(){ me=null; try{sessionStorage.removeItem('anno_me');}catch(e){} $('lPass').value=''; showLogin(); };
+$('logout').onclick=function(){
+  if(SB) SB.auth.signOut().catch(function(){});
+  me=null; TOKEN=null;
+  try{ sessionStorage.removeItem('anno_me'); }catch(e){}
+  $('lPass').value=''; showLogin();
+};
 function enter(u){
   me=u; try{ sessionStorage.setItem('anno_me',u.id); }catch(e){}
   $('login').classList.add('hidden'); $('app').classList.remove('hidden');
@@ -1073,43 +1147,50 @@ function wire(){
 }
 
 /* ================= upload ================= */
-function shareFile(v,f){
-  if(!CLOUD||!ASSETS||v.assetId||!f) return;
-  if(f.size>ASSET_MAX) return;
-  ASSETS.upload(f).then(function(r){
-    v.assetId=r.id; STORED[v.id]=true; wVideo(v);
-    if(cur==='videos') render();
-  }).catch(cerr);
-}
 function upload(fileList){
   var files=[];
-  for(var i=0;i<fileList.length;i++) if(/^video\//.test(fileList[i].type)||/\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(fileList[i].name)) files.push(fileList[i]);
+  for(var i=0;i<fileList.length;i++)
+    if(/^video\//.test(fileList[i].type)||/\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(fileList[i].name)) files.push(fileList[i]);
   if(!files.length){ alert(t('ePickFile')); return; }
-  var left=files.length, failed=0, big=0;
+
+  var left=files.length, failed=0;
   function status(){ var s=$('upStatus'); if(s) s.textContent= left? t('uploading',{n:left}) : ''; }
   status();
+
   files.forEach(function(f){
     var id=uid('v'), url=URL.createObjectURL(f);
     makeThumb(url,function(thumb,d){
       if(d==null&&!thumb){ failed++; left--; status(); if(!left) finish(); URL.revokeObjectURL(url); return; }
-      var v={id:id,name:f.name,dur:d||0,size:f.size,added:new Date().toISOString().slice(0,10),thumb:thumb,assetId:''};
-      FILES[id]=url;
-      idbPut(id,f,function(){});                       /* always keep a local copy */
-      function done(){ DB.videos.push(v); wVideo(v); save(); left--; status(); if(!left) finish(); }
-      if(CLOUD&&ASSETS&&f.size<=ASSET_MAX){
-        ASSETS.upload(f).then(function(r){ v.assetId=r.id; STORED[id]=true; done(); })
-                        .catch(function(){ failed++; done(); });
-      } else { if(CLOUD&&f.size>ASSET_MAX) big++; done(); }
+
+      function done(){ left--; status(); if(!left) finish(); }
+
+      if(!CLOUD){
+        var v={id:id,name:f.name,dur:d||0,size:f.size,added:new Date().toISOString().slice(0,10),thumb:thumb,assetId:''};
+        FILES[id]=url; idbPut(id,f,function(){});
+        DB.videos.push(v); save(); return done();
+      }
+
+      /* Vercel caps a function request body at 4.5 MB, so the browser uploads
+         straight to R2 with a presigned PUT. The bucket therefore needs a CORS
+         policy allowing PUT from this origin - see README. */
+      api('upload',{method:'POST',body:{ name:f.name, type:f.type }}).then(function(sig){
+        return fetch(sig.url,{ method:'PUT',
+          headers:{ 'content-type': f.type||'application/octet-stream' }, body:f
+        }).then(function(r){
+          if(!r.ok) throw 'R2 PUT failed (' + r.status + ') - check the bucket CORS policy';
+          return api('videos',{method:'POST',body:{
+            name:f.name, dur:d||0, size:f.size, thumb:thumb, r2_key:sig.key }});
+        });
+      }).then(function(){ URL.revokeObjectURL(url); done(); })
+        .catch(function(e){ cerr(e); failed++; done(); });
     });
   });
+
   function finish(){
     if(failed) alert(t('eStore'));
-    else if(big) alert(t('tooBig'));
-    if(cur==='videos') render();
+    pull().then(function(){ if(cur==='videos') render(); });
   }
 }
-
-function wireExtra(){}
 
 /* ================= workspace ================= */
 var W={task:null,items:[],draft:{start:null,end:null},loaded:false};
@@ -1165,7 +1246,6 @@ function takeFile(f){
     vv.size=f.size;
     if(!vv.thumb) makeThumb(url,function(th,d){ if(th){ vv.thumb=th; if(d) vv.dur=d; } wVideo(vv); save(); });
     else { wVideo(vv); save(); }
-    shareFile(vv,f);
   }
 }
 $('wHelp').onclick=function(){ alert(t('help')); };
@@ -1255,27 +1335,52 @@ document.addEventListener('keydown',function(e){
 /* ================= boot ================= */
 load();
 document.documentElement.lang=lang;
-function boot(){
+
+function setupScreen(missing){
+  document.body.innerHTML =
+    '<div style="max-width:620px;margin:60px auto;padding:0 20px;font:14px system-ui,sans-serif;line-height:1.6">'
+    + '<h1 style="font-size:20px">Setup required</h1>'
+    + '<p>These environment variables are not set on this deployment:</p>'
+    + '<pre style="background:#f4f4f5;padding:12px;border-radius:8px;overflow:auto">'
+    + missing.map(function(m){ return esc(m); }).join(String.fromCharCode(10)) + '</pre>'
+    + '<p>Add them in the Vercel project under <b>Settings &rarr; Environment Variables</b>, '
+    + 'then redeploy. Full instructions are in the repository README.</p></div>';
+}
+
+function boot(u){
   idbKeys(function(keys){
     keys.forEach(function(k){ STORED[k]=true; });
-    if(CLOUD) ensureAdmin();
-    if(!DB.users.length&&!CLOUD) seed();
-    var sid=null; try{ sid=sessionStorage.getItem('anno_me'); }catch(e){}
-    var su=sid?userById(sid):null;
-    if(su) enter(su); else showLogin();
+    if(!CLOUD && !DB.users.length) seed();
+    if(u) enter(u); else showLogin();
   });
 }
+
 (function connect(){
   var started=false;
-  function fallback(){ if(started) return; started=true; CLOUD=false; boot(); }
-  if(!(window.claude&&typeof claude.use==='function')) return fallback();
-  claude.use('assets').then(function(a){ ASSETS=a; },function(){});
-  claude.use('db').then(function(d){
-    if(!d) return fallback();
-    DBC=d; DB={users:[],videos:[],tasks:[],anns:{}};
-    startCloud(function(){ if(started) return; started=true; boot(); });
-  },fallback);
-  setTimeout(fallback,11000);
+  function fallback(){ if(started) return; started=true; CLOUD=false; boot(null); }
+
+  fetch('/api/config').then(function(r){ return r.json(); }).then(function(c){
+    if(!c || !c.ready){ return setupScreen((c && c.missing) || ['SUPABASE_URL']); }
+    if(!window.supabase){ return fallback(); }
+
+    SB = window.supabase.createClient(c.supabaseUrl, c.supabaseAnonKey);
+    return SB.auth.getSession().then(function(g){
+      started = true;
+      var sess = g && g.data && g.data.session;
+      if(!sess){ CLOUD = true; setInterval(pull, 5000); return boot(null); }
+
+      TOKEN = sess.access_token;
+      /* Supabase rotates the access token roughly hourly; without this the API
+         starts 401-ing partway through a long annotation session. */
+      SB.auth.onAuthStateChange(function(_e, ns){ if(ns) TOKEN = ns.access_token; });
+
+      return api('me').then(function(u){
+        startCloud(function(){ boot(u); });
+      }).catch(function(){ CLOUD = true; setInterval(pull, 5000); boot(null); });
+    });
+  }).catch(fallback);
+
+  setTimeout(fallback, 12000);
 })();
 })();
 </script>
