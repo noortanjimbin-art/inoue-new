@@ -394,6 +394,7 @@ function save(){ if(CLOUD) return; try{ localStorage.setItem(KEY,JSON.stringify(
 
 /* ================= shared store (db + assets) ================= */
 var CLOUD=false, SB=null, TOKEN=null;
+var THUMBS={};   /* videoId -> base64 thumb, so polling stays light */
 function cerr(e){ if(e) console.warn(e); }
 
 function api(path, opts){
@@ -475,10 +476,14 @@ function pull(){
   return Promise.all([ api('users'), api('videos'), api('tasks') ]).then(function(r){
     DB.users = (r[0]||[]).map(function(u){
       return { id:u.id, name:u.name, email:u.email, role:u.role }; });
+    var needThumbs=false;
     DB.videos = (r[1]||[]).map(function(v){
       STORED[v.id]=true;
+      if(v.thumb) THUMBS[v.id]=v.thumb;
+      if(!(v.id in THUMBS)) needThumbs=true;
       return { id:v.id, name:v.name, dur:v.dur||0, size:v.size||0,
-               added:String(v.added||'').slice(0,10), thumb:v.thumb||null, assetId:v.r2_key||'' }; });
+               added:String(v.added||'').slice(0,10),
+               thumb:THUMBS[v.id]||null, assetId:v.r2_key||'' }; });
     DB.tasks = (r[2]||[]).map(function(x){
       return { id:x.id, videoId:x.video_id, userId:x.user_id||null,
                status:x.status, created:x.created, updated:x.updated }; });
@@ -487,6 +492,15 @@ function pull(){
     /* One request for every annotation the caller can see. Fetching per task
        meant 3+N requests every 5 seconds, which scaled straight into Vercel's
        invocation limits once a few dozen tasks existed. */
+    /* Only when a video we have never seen appears. */
+    if(needThumbs){
+      api('videos?thumbs=1').then(function(full){
+        (full||[]).forEach(function(v){ THUMBS[v.id]= v.thumb || null; });
+        DB.videos.forEach(function(v){ v.thumb = THUMBS[v.id] || null; });
+        refresh();
+      }).catch(function(){});
+    }
+
     return api('anns').then(function(rows){
       var byTask={};
       (rows||[]).forEach(function(a){

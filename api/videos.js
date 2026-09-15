@@ -7,7 +7,12 @@ export default async function handler(req, res) {
   const db = admin();
 
   if (req.method === 'GET') {
-    const { data } = await db.from('videos').select('*').order('added', { ascending: false });
+    // Thumbnails are base64 JPEGs of 20-30 KB each, stored inline on the row.
+    // The client polls this every 5s, so sending them every time meant megabytes
+    // per minute per annotator. They change only when a video is added, so they
+    // are opt-in and the client caches them.
+    const cols = req.query.thumbs ? '*' : 'id,name,dur,size,added,r2_key';
+    const { data } = await db.from('videos').select(cols).order('added', { ascending: false });
     return json(res, 200, data || []);
   }
 
