@@ -454,11 +454,18 @@ function wAnns(tid, items){
 }
 function dAnns(tid){ /* rows cascade with the task */ }
 
-var rTimer=null;
+var rTimer=null, lastSig=null;
 function refresh(){
   clearTimeout(rTimer);
   rTimer=setTimeout(function(){
-    if(me&&!$('app').classList.contains('hidden')) render();
+    /* Only redraw when something actually changed. Most polls change nothing,
+       and an unconditional redraw every 5s wiped in-progress input. */
+    if(me&&!$('app').classList.contains('hidden')){
+      var sg=dataSig();
+      if(sg!==lastSig){ lastSig=sg; render(); }
+      /* direct render() calls elsewhere do not touch lastSig; the comparison
+         above re-syncs on the next tick, costing at most one extra redraw. */
+    }
     if(W.task){
       var live=null; DB.tasks.forEach(function(x){ if(x.id===W.task.id) live=x; });
       if(live){ W.task=live;
@@ -859,10 +866,50 @@ function go(tab){
   for(var i=0;i<bs.length;i++) bs[i].classList.toggle('on', bs[i].dataset.tab===tab);
   render();
 }
-function render(){
+/* render() replaces the whole view, so anything half-entered in it is destroyed.
+   Capture the form controls first and put them back afterwards, otherwise a
+   background refresh resets a dropdown the user is in the middle of using. */
+function formState(){
+  var st={}, v=$('view');
+  if(!v) return st;
+  Array.prototype.forEach.call(v.querySelectorAll('select,input,textarea'), function(el){
+    if(!el.id) return;
+    st[el.id] = (el.type==='checkbox'||el.type==='radio') ? el.checked : el.value;
+  });
+  return st;
+}
+function restoreForm(st){
   var v=$('view');
+  if(!v) return;
+  Array.prototype.forEach.call(v.querySelectorAll('select,input,textarea'), function(el){
+    if(!el.id || !(el.id in st)) return;
+    if(el.type==='checkbox'||el.type==='radio'){ el.checked=st[el.id]; return; }
+    if(el.tagName==='SELECT'){
+      /* the chosen row may have been deleted meanwhile; leave the default then */
+      var ok=false;
+      for(var i=0;i<el.options.length;i++) if(el.options[i].value===st[el.id]) ok=true;
+      if(!ok) return;
+    }
+    el.value=st[el.id];
+  });
+}
+
+function render(){
+  var v=$('view'), st=formState();
   v.innerHTML = cur==='dash'?viewDash() : cur==='team'?viewTeam() : cur==='videos'?viewVideos() : cur==='export'?viewExport() : viewTasks();
+  restoreForm(st);   /* before wire(), so handlers that read filters see them */
   wire();
+}
+
+/* What the rendered views actually depend on. Thumbnails and other bulk fields
+   are excluded so an unchanged poll is cheap to compare. */
+function dataSig(){
+  var a=[];
+  DB.users.forEach(function(u){ a.push('u'+u.id+u.role+u.name); });
+  DB.videos.forEach(function(v){ a.push('v'+v.id+v.name+v.dur+v.size+(v.thumb?1:0)); });
+  DB.tasks.forEach(function(x){ a.push('t'+x.id+x.videoId+x.userId+x.status+x.updated); });
+  Object.keys(DB.anns).sort().forEach(function(k){ a.push('a'+k+':'+DB.anns[k].length); });
+  return a.join('|');
 }
 
 /* ================= dashboard ================= */
