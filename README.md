@@ -75,7 +75,7 @@ on that bucket. Note the Access Key ID and Secret Access Key.
 ```json
 [
   {
-    "AllowedOrigins": ["https://<your-vercel-domain>"],
+    "AllowedOrigins": ["https://*.vercel.app"],
     "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["content-type"],
     "ExposeHeaders": ["etag"],
@@ -83,6 +83,11 @@ on that bucket. Note the Access Key ID and Secret Access Key.
   }
 ]
 ```
+
+The wildcard covers preview deployments as well as production. It is not a
+security boundary on its own: an upload still requires a presigned URL, which
+`/api/upload` only issues to a signed-in admin. Narrow it to the exact domain
+once one is settled.
 
 ### 3. Vercel environment variables
 
