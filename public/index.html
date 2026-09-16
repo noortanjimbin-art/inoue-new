@@ -322,7 +322,7 @@ ja:{
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
  overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', noVideoSet:'（動画なし）', deleted:'（削除済み）',
- help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\n, .     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
+ help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\nD F     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
  appName:'Video Annotation Tool', signin:'Sign In', signup:'Create Account', name:'Name', email:'Email',
@@ -371,7 +371,7 @@ en:{
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
  overlap:'Overlaps the previous segment', seekHere:'Click to seek here', noVideoSet:'(no video)', deleted:'(deleted)',
- help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\n, .     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
+ help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\nD F     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
 function t(k,vars){
@@ -1466,11 +1466,13 @@ document.addEventListener('keydown',function(e){
   }
   var tag=(e.target.tagName||'').toLowerCase();
   if(tag==='input'||tag==='select'||tag==='textarea') return;
+  /* leave browser and OS combinations alone - Ctrl+F is Find, not a frame step */
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
   if(e.key===' '||e.code==='Space'){ e.preventDefault(); toggle(); }
   else if(e.key==='ArrowLeft'){ e.preventDefault(); seek(-SEEK_STEP); }
   else if(e.key==='ArrowRight'){ e.preventDefault(); seek(SEEK_STEP); }
-  else if(e.key==='.'||e.key==='>'){ e.preventDefault(); frameStep(1); }
-  else if(e.key===','||e.key==='<'){ e.preventDefault(); frameStep(-1); }
+  else if(e.key==='f'||e.key==='F'){ e.preventDefault(); frameStep(1); }
+  else if(e.key==='d'||e.key==='D'){ e.preventDefault(); frameStep(-1); }
   else if(e.key==='Enter'){ e.preventDefault(); if(st) stamp(); else cStart.focus(); }
   else if(e.key==='Delete'||e.key==='Backspace'){ if(st){ e.preventDefault(); clearCell(); } }
 });
