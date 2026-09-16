@@ -74,3 +74,34 @@ end; $$;
 drop trigger if exists first_user_is_admin on inoue_new.users;
 create trigger first_user_is_admin after insert on inoue_new.users
   for each row execute function inoue_new.promote_first_user();
+
+-- Applied as migration `atomic_replace_anns`.
+-- Replacing a task's annotations was a DELETE followed by a separate INSERT;
+-- anything failing between the two destroyed the annotator's work. plpgsql runs
+-- in a single transaction, so the delete only stands if the insert succeeds.
+create or replace function inoue_new.replace_anns(p_task uuid, p_items jsonb)
+returns integer
+language plpgsql
+security definer
+set search_path = inoue_new, public
+as $$
+declare
+  n integer;
+begin
+  delete from inoue_new.anns where task_id = p_task;
+
+  insert into inoue_new.anns (task_id, t_start, t_end, caption)
+  select p_task,
+         (e->>'start')::double precision,
+         (e->>'end')::double precision,
+         coalesce(e->>'caption', '')
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) e
+  where e->>'start' is not null and e->>'end' is not null;
+
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+revoke all on function inoue_new.replace_anns(uuid, jsonb) from public;
+revoke all on function inoue_new.replace_anns(uuid, jsonb) from anon, authenticated;
+grant execute on function inoue_new.replace_anns(uuid, jsonb) to service_role;

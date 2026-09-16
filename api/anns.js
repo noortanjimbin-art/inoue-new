@@ -31,20 +31,21 @@ export default async function handler(req, res) {
 
   if (req.method === 'PUT') {
     // Whole-list replace, matching how the workspace persists a task.
+    // This used to DELETE then INSERT as two statements: anything failing in
+    // between wiped the annotator's work. replace_anns does both inside one
+    // transaction, so a failed insert rolls the delete back.
     const items = (req.body || {}).items || [];
-    await db.from('anns').delete().eq('task_id', taskId);
-    if (items.length) {
-      const rows = items.map((a) => ({
-        task_id: taskId, t_start: a.start, t_end: a.end, caption: a.caption || '',
-      }));
-      const { error } = await db.from('anns').insert(rows);
-      if (error) return json(res, 400, { error: error.message });
-    }
+    const { data: written, error } = await db.rpc('replace_anns', {
+      p_task: taskId,
+      p_items: items,
+    });
+    if (error) return json(res, 500, { error: error.message });
+
     await db.from('tasks').update({
       updated: new Date().toISOString(),
       status: items.length && task.status === 'todo' ? 'doing' : task.status,
     }).eq('id', taskId);
-    return json(res, 200, { ok: true, count: items.length });
+    return json(res, 200, { ok: true, count: written });
   }
 
   return json(res, 405, { error: 'method' });

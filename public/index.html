@@ -98,6 +98,13 @@ tr:last-child td{border-bottom:none}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .muted{color:var(--text-3)}
 .ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.capedit{width:100%;box-sizing:border-box;font:inherit;color:inherit;background:transparent;
+  border:1px solid transparent;border-radius:4px;padding:3px 5px;margin:-3px 0;cursor:text;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.capedit:hover{border-color:var(--border)}
+.capedit:focus{border-color:var(--accent);background:var(--surface);outline:none;
+  text-overflow:clip}
+.capedit::placeholder{color:var(--text-3)}
 .empty{text-align:center;color:var(--text-3);font-size:13px;padding:28px 10px}
 .rowform{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
 .rowform>div{flex:1;min-width:150px}
@@ -321,7 +328,7 @@ ja:{
  capPh:'作業内容を入力', savedMsg:'保存しました', doneMsg:'完了にしました', eNoAnn:'アノテーションが1件もありません',
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
- overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', noVideoSet:'（動画なし）', deleted:'（削除済み）',
+ overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
  help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\nD F     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
@@ -370,7 +377,7 @@ en:{
  capPh:'Describe the work', savedMsg:'Saved', doneMsg:'Marked as done', eNoAnn:'There are no annotations yet',
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
- overlap:'Overlaps the previous segment', seekHere:'Click to seek here', noVideoSet:'(no video)', deleted:'(deleted)',
+ overlap:'Overlaps the previous segment', seekHere:'Click to seek here', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
  help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\nD F     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
@@ -448,9 +455,25 @@ function dTask(id){
   if(!CLOUD) return save();
   api('tasks?id=' + id, {method:'DELETE'}).then(pull).catch(cerr);
 }
+/* One save per task in flight at a time. Fired straight off, two rapid saves
+   could land out of order and the older list would win, silently dropping the
+   newer rows. Anything queued while a save runs collapses to the latest state. */
+var annBusy={}, annNext={};
 function wAnns(tid, items){
   if(!CLOUD) return save();
-  api('anns?task=' + tid, {method:'PUT', body:{ items: items }}).catch(cerr);
+  annNext[tid]=items.slice();
+  if(annBusy[tid]) return;
+  annBusy[tid]=true;
+  (function run(){
+    if(!(tid in annNext)){ annBusy[tid]=false; return; }
+    var snap=annNext[tid]; delete annNext[tid];
+    api('anns?task=' + tid, {method:'PUT', body:{ items: snap }}).then(run, function(e){
+      cerr(e);
+      annBusy[tid]=false;
+      annNext[tid]=snap;        /* keep it; the next edit retries */
+      oops(t('eSaveFail'));     /* never let a failed save pass unnoticed */
+    });
+  })();
 }
 function dAnns(tid){ /* rows cascade with the task */ }
 
@@ -1344,6 +1367,7 @@ function persist(){ if(!W.task) return; DB.anns[W.task.id]=W.items.slice();
 function flash(m){ var e=$('err'); e.style.color='var(--ok)'; e.textContent=m;
   setTimeout(function(){ if(e.textContent===m){e.textContent='';e.style.color='';} },1800); }
 function say(m){ var e=$('err'); e.style.color=''; e.textContent=m||''; }
+function oops(m){ var e=$('err'); e.style.color='var(--danger)'; e.textContent=m; }
 function attach(url){ vid.src=url; vid.classList.remove('hidden'); drop.classList.add('hidden'); W.loaded=true; W.fps=30; vid.load(); }
 $('wPick').onclick=function(){ $('wFile').click(); };
 $('wFile').onchange=function(e){ takeFile(e.target.files[0]); };
@@ -1447,7 +1471,23 @@ function renderRows(){
     row.title=overlap?t('overlap'):t('seekHere');
     var a=document.createElement('div'); a.className='t'; a.textContent=fmt(it.start);
     var b=document.createElement('div'); b.className='t'; b.textContent=fmt(it.end);
-    var c=document.createElement('div'); c.className='ell'; c.textContent=it.caption; c.title=it.caption;
+    var c=document.createElement('input');
+    c.type='text'; c.className='capedit'; c.value=it.caption;
+    c.title=it.caption||t('editCap'); c.placeholder=t('capEmpty');
+    /* the row seeks the video on click, which must not fire while placing a cursor */
+    c.onclick=function(e){ e.stopPropagation(); };
+    c.onkeydown=function(e){
+      e.stopPropagation();                 /* keep playback shortcuts out of the field */
+      if(e.key==='Enter'){ e.preventDefault(); c.blur(); }
+      else if(e.key==='Escape'){ e.preventDefault(); c.value=it.caption; c.blur(); }
+    };
+    c.onblur=function(){
+      var v=c.value.trim();
+      if(v===it.caption){ c.value=it.caption; return; }   /* normalise, save nothing */
+      it.caption=v; c.title=v||t('editCap');
+      persist();                            /* writes the whole list back */
+      flash(t('capSaved'));   /* flash clears itself; say() would linger */
+    };
     var x=document.createElement('button'); x.className='iconbtn'; x.innerHTML='×';
     x.onclick=function(e){ e.stopPropagation(); W.items.splice(i,1); renderRows(); segs(); persist(); };
     row.appendChild(a); row.appendChild(b); row.appendChild(c); row.appendChild(x);
