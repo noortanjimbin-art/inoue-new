@@ -239,9 +239,9 @@ tr:last-child td{border-bottom:none}
         </div>
       </div>
       <div class="ctrl">
-        <button id="back">← 3s</button>
+        <button id="back">← 1s</button>
         <button id="play" class="primary" style="min-width:74px"></button>
-        <button id="fwd">3s →</button>
+        <button id="fwd">1s →</button>
         <div class="bar" id="bar"><div class="fill" id="fill"></div></div>
         <span class="tc" id="tc">0:00.00 / 0:00.00</span>
       </div>
@@ -322,7 +322,7 @@ ja:{
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
  overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', noVideoSet:'（動画なし）', deleted:'（削除済み）',
- help:'ショートカット\n\nSpace   再生 / 停止\n← →     3秒 巻き戻し / 送り\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
+ help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\n, .     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
  appName:'Video Annotation Tool', signin:'Sign In', signup:'Create Account', name:'Name', email:'Email',
@@ -371,7 +371,7 @@ en:{
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
  overlap:'Overlaps the previous segment', seekHere:'Click to seek here', noVideoSet:'(no video)', deleted:'(deleted)',
- help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 3s\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
+ help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\n, .     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
 function t(k,vars){
@@ -1305,7 +1305,7 @@ function upload(fileList){
 }
 
 /* ================= workspace ================= */
-var W={task:null,items:[],draft:{start:null,end:null},loaded:false};
+var W={task:null,items:[],draft:{start:null,end:null},loaded:false,fps:30};
 var vid=$('v'), stage=$('stage'), drop=$('drop');
 var cStart=$('cStart'), cEnd=$('cEnd'), cCap=$('cCap');
 
@@ -1344,7 +1344,7 @@ function persist(){ if(!W.task) return; DB.anns[W.task.id]=W.items.slice();
 function flash(m){ var e=$('err'); e.style.color='var(--ok)'; e.textContent=m;
   setTimeout(function(){ if(e.textContent===m){e.textContent='';e.style.color='';} },1800); }
 function say(m){ var e=$('err'); e.style.color=''; e.textContent=m||''; }
-function attach(url){ vid.src=url; vid.classList.remove('hidden'); drop.classList.add('hidden'); W.loaded=true; vid.load(); }
+function attach(url){ vid.src=url; vid.classList.remove('hidden'); drop.classList.add('hidden'); W.loaded=true; W.fps=30; vid.load(); }
 $('wPick').onclick=function(){ $('wFile').click(); };
 $('wFile').onchange=function(e){ takeFile(e.target.files[0]); };
 stage.addEventListener('dragover',function(e){ e.preventDefault(); });
@@ -1363,11 +1363,40 @@ function takeFile(f){
 $('wHelp').onclick=function(){ alert(t('help')); };
 function toggle(){ if(!W.loaded) return; if(vid.paused) vid.play(); else vid.pause(); }
 function seek(d){ if(!W.loaded) return; vid.currentTime=Math.min(Math.max(0,vid.currentTime+d), vid.duration||0); }
-$('play').onclick=toggle; $('back').onclick=function(){seek(-3);}; $('fwd').onclick=function(){seek(3);};
+var SEEK_STEP=1;   /* seconds per arrow press / skip button */
+$('play').onclick=toggle;
+$('back').onclick=function(){seek(-SEEK_STEP);};
+$('fwd').onclick=function(){seek(SEEK_STEP);};
+
+/* Single-frame stepping. HTML5 video exposes no frame rate, so measure it from
+   requestVideoFrameCallback during playback and fall back to 30fps. */
+function measureFps(){
+  if(typeof vid.requestVideoFrameCallback!=='function') return;
+  var prev=null, samples=[];
+  function cb(now, meta){
+    if(prev && meta.mediaTime>prev.mediaTime){
+      var dT=meta.mediaTime-prev.mediaTime, dF=meta.presentedFrames-prev.presentedFrames;
+      if(dF>0 && dT>0) samples.push(dF/dT);
+    }
+    prev=meta;
+    if(samples.length<12){ vid.requestVideoFrameCallback(cb); return; }
+    samples.sort(function(a,b){ return a-b; });
+    var med=samples[Math.floor(samples.length/2)];
+    if(med>1 && med<1000) W.fps=med;   /* median shrugs off decode hiccups */
+  }
+  vid.requestVideoFrameCallback(cb);
+}
+function frameStep(dir){
+  if(!W.loaded) return;
+  if(!vid.paused) vid.pause();   /* stepping only means anything while paused */
+  var f=1/(W.fps||30);
+  vid.currentTime=Math.min(Math.max(0, vid.currentTime + dir*f), vid.duration||0);
+}
 vid.addEventListener('play',function(){ $('play').textContent=t('pause'); });
 vid.addEventListener('pause',function(){ $('play').textContent=t('play'); });
 vid.addEventListener('timeupdate',tick);
 vid.addEventListener('loadedmetadata',function(){ tick(); segs(); });
+vid.addEventListener('playing',function(){ measureFps(); });
 $('bar').onclick=function(e){ if(!W.loaded||!vid.duration) return; var r=this.getBoundingClientRect(); vid.currentTime=(e.clientX-r.left)/r.width*vid.duration; };
 function tick(){ var d=vid.duration||0; $('fill').style.width=(d?vid.currentTime/d*100:0)+'%'; $('tc').textContent=fmt(vid.currentTime||0)+' / '+fmt(d); }
 function segs(){
@@ -1438,8 +1467,10 @@ document.addEventListener('keydown',function(e){
   var tag=(e.target.tagName||'').toLowerCase();
   if(tag==='input'||tag==='select'||tag==='textarea') return;
   if(e.key===' '||e.code==='Space'){ e.preventDefault(); toggle(); }
-  else if(e.key==='ArrowLeft'){ e.preventDefault(); seek(-3); }
-  else if(e.key==='ArrowRight'){ e.preventDefault(); seek(3); }
+  else if(e.key==='ArrowLeft'){ e.preventDefault(); seek(-SEEK_STEP); }
+  else if(e.key==='ArrowRight'){ e.preventDefault(); seek(SEEK_STEP); }
+  else if(e.key==='.'||e.key==='>'){ e.preventDefault(); frameStep(1); }
+  else if(e.key===','||e.key==='<'){ e.preventDefault(); frameStep(-1); }
   else if(e.key==='Enter'){ e.preventDefault(); if(st) stamp(); else cStart.focus(); }
   else if(e.key==='Delete'||e.key==='Backspace'){ if(st){ e.preventDefault(); clearCell(); } }
 });
