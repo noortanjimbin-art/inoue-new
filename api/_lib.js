@@ -35,6 +35,22 @@ export const r2 = () =>
 
 export const json = (res, status, body) => res.status(status).json(body);
 
+// PostgREST caps a response at 1000 rows and does not signal that it truncated.
+// Every list read goes through this, because a silently short list is worse than
+// a slow one: the client caches it as the truth. This is what cost a day of
+// annotation work when only the annotations read was capped.
+export async function allRows(build) {
+  const PAGE = 1000;
+  let from = 0, out = [];
+  for (;;) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    out = out.concat(data || []);
+    if (!data || data.length < PAGE) return out;
+    from += PAGE;
+  }
+}
+
 // Resolves the caller's Supabase session to their row in `users`, creating it on
 // first sign-in. Supabase Auth decides whether the token is valid; this table
 // decides what the holder may do.

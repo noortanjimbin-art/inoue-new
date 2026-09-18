@@ -1,19 +1,4 @@
-import { admin, currentUser, isAdmin, json } from './_lib.js';
-
-// PostgREST caps a response at 1000 rows and gives no indication it truncated.
-// Reading annotations in one unpaged request silently dropped everything past
-// that ceiling once the library grew, so every read here pages to the end.
-async function allRows(db, build) {
-  const PAGE = 1000;
-  let from = 0, out = [];
-  for (;;) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    out = out.concat(data || []);
-    if (!data || data.length < PAGE) return out;
-    from += PAGE;
-  }
-}
+import { admin, currentUser, isAdmin, json, allRows } from './_lib.js';
 
 export default async function handler(req, res) {
   const me = await currentUser(req, res);
@@ -23,13 +8,18 @@ export default async function handler(req, res) {
 
   // No task given: every annotation the caller may see, in one round trip.
   if (!taskId && req.method === 'GET') {
-    let tq = db.from('tasks').select('id');
-    if (!isAdmin(me)) tq = tq.eq('user_id', me.id);
-    const { data: mine } = await tq;
-    const ids = (mine || []).map((t) => t.id);
-    if (!ids.length) return json(res, 200, []);
     try {
-      const rows = await allRows(db, () =>
+      // This lookup was itself unpaged: past 1000 tasks the id list would be cut
+      // short and every annotation on the missing tasks would vanish from the
+      // response - the same failure one level up.
+      const mine = await allRows(() => {
+        let q = db.from('tasks').select('id').order('id');
+        if (!isAdmin(me)) q = q.eq('user_id', me.id);
+        return q;
+      });
+      const ids = mine.map((t) => t.id);
+      if (!ids.length) return json(res, 200, []);
+      const rows = await allRows(() =>
         db.from('anns').select('*').in('task_id', ids).order('task_id').order('t_start'));
       return json(res, 200, rows);
     } catch (e) {
@@ -47,7 +37,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const rows = await allRows(db, () =>
+      const rows = await allRows(() =>
         db.from('anns').select('*').eq('task_id', taskId).order('t_start'));
       return json(res, 200, rows);
     } catch (e) {

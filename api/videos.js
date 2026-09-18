@@ -1,4 +1,4 @@
-import { admin, currentUser, isAdmin, json, r2, env } from './_lib.js';
+import { admin, currentUser, isAdmin, json, r2, env, allRows } from './_lib.js';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 export default async function handler(req, res) {
@@ -12,8 +12,9 @@ export default async function handler(req, res) {
     // per minute per annotator. They change only when a video is added, so they
     // are opt-in and the client caches them.
     const cols = req.query.thumbs ? '*' : 'id,name,dur,size,added,r2_key';
-    const { data } = await db.from('videos').select(cols).order('added', { ascending: false });
-    return json(res, 200, data || []);
+    const data = await allRows(() =>
+      db.from('videos').select(cols).order('added', { ascending: false }));
+    return json(res, 200, data);
   }
 
   if (req.method === 'POST') {

@@ -1,4 +1,4 @@
-import { admin, currentUser, isAdmin, json } from './_lib.js';
+import { admin, currentUser, isAdmin, json, allRows } from './_lib.js';
 
 export default async function handler(req, res) {
   const me = await currentUser(req, res);
@@ -7,10 +7,12 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     // Annotators see only their own queue; admins see everything.
-    let q = db.from('tasks').select('*').order('updated', { ascending: false });
-    if (!isAdmin(me)) q = q.eq('user_id', me.id);
-    const { data } = await q;
-    return json(res, 200, data || []);
+    const data = await allRows(() => {
+      let q = db.from('tasks').select('*').order('updated', { ascending: false });
+      if (!isAdmin(me)) q = q.eq('user_id', me.id);
+      return q;
+    });
+    return json(res, 200, data);
   }
 
   if (req.method === 'POST') {

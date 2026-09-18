@@ -328,7 +328,7 @@ ja:{
  capPh:'作業内容を入力', savedMsg:'保存しました', doneMsg:'完了にしました', eNoAnn:'アノテーションが1件もありません',
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
- overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', loadingAnn:'記録を読み込んでいます…', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
+ overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', loadingAnn:'記録を読み込んでいます…', eExportFail:'最新の記録を取得できなかったため、書き出しを中止しました。不完全なファイルを作らないためです。通信状況を確認して再試行してください。', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
  help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\nD F     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
@@ -377,7 +377,7 @@ en:{
  capPh:'Describe the work', savedMsg:'Saved', doneMsg:'Marked as done', eNoAnn:'There are no annotations yet',
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
- overlap:'Overlaps the previous segment', seekHere:'Click to seek here', loadingAnn:'Loading records...', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
+ overlap:'Overlaps the previous segment', seekHere:'Click to seek here', loadingAnn:'Loading records...', eExportFail:'Export cancelled: the latest records could not be fetched, and an incomplete file is worse than none. Check your connection and try again.', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
  help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\nD F     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
@@ -1109,6 +1109,25 @@ function viewExport(){
   h+='<div class="panel"><h3>'+t('preview')+' <span class="muted" style="font-weight:400" id="exCount"></span></h3><div id="exPrev"></div></div>';
   return h;
 }
+/* The export is the actual deliverable, so it must never be quietly short.
+   DB.anns is a poll-maintained cache; this re-reads the store first and aborts
+   loudly if it cannot, rather than writing a file with gaps in it. */
+function withFreshAnns(cb){
+  if(!CLOUD) return cb();
+  api('anns').then(function(rows){
+    var byTask={};
+    (rows||[]).forEach(function(a){
+      (byTask[a.task_id]=byTask[a.task_id]||[]).push(
+        { start:a.t_start, end:a.t_end, caption:a.caption||'', at:a.at });
+    });
+    DB.tasks.forEach(function(x){
+      if(W.task && W.task.id===x.id) return;
+      DB.anns[x.id]=byTask[x.id]||[];
+    });
+    cb();
+  }).catch(function(e){ cerr(e); alert(t('eExportFail')); });
+}
+
 function exRows(){
   var vf=$('exVideo')?$('exVideo').value:'',uf=$('exUser')?$('exUser').value:'',sf=$('exStatus')?$('exStatus').value:'';
   var out=[];
@@ -1256,20 +1275,22 @@ function wire(){
     var nt={id:uid('t'),videoId:vid2,userId:u,status:'todo',created:new Date().toISOString().slice(0,10),updated:Date.now(),_new:true};
     DB.tasks.push(nt); wTask(nt); render();
   };
-  if((el=$('exRefresh'))) el.onclick=exRender;
+  if((el=$('exRefresh'))) el.onclick=function(){ withFreshAnns(exRender); };
   if($('exVideo')){ $('exVideo').onchange=exRender; $('exUser').onchange=exRender; $('exStatus').onchange=exRender; exRender(); }
-  if((el=$('exJson'))) el.onclick=function(){
+  if((el=$('exJson'))) el.onclick=function(){ withFreshAnns(function(){
     var rows=exRows(),byV={};
     rows.forEach(function(r){ (byV[r.video]=byV[r.video]||[]).push({start_sec:r.start_sec,end_sec:r.end_sec,duration_sec:r.duration_sec,caption:r.caption,annotator:r.annotator}); });
     dl('annotations.json',JSON.stringify({exported_at:new Date().toISOString(),
       videos:Object.keys(byV).map(function(k){return {video:k,segments:byV[k]};})},null,2),'application/json');
-  };
-  if((el=$('exCsv'))) el.onclick=function(){
+    exRender();
+  }); };
+  if((el=$('exCsv'))) el.onclick=function(){ withFreshAnns(function(){
     function q(s){ return '"'+String(s).replace(/"/g,'""')+'"'; }
     var rows=exRows(),out=[['video','annotator','start','end','start_sec','end_sec','duration_sec','caption']];
     rows.forEach(function(r){ out.push([q(r.video),q(r.annotator),fmt(r.start_sec),fmt(r.end_sec),r.start_sec,r.end_sec,r.duration_sec,q(r.caption)]); });
     dl('annotations.csv','\ufeff'+out.map(function(x){return x.join(',');}).join('\n'),'text/csv');
-  };
+    exRender();
+  }); };
   v.querySelectorAll('[data-open]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); openTask(b.dataset.open); }; });
   v.querySelectorAll('[data-deltask]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation();
     if(!confirm(t('confTask'))) return;
@@ -1485,6 +1506,9 @@ function setCell(el,val){ el.textContent=fmt(val); el.classList.toggle('empty-v'
 function which(){ var a=document.activeElement; return a===cStart?'start':a===cEnd?'end':a===cCap?'cap':null; }
 function stamp(){
   if(!W.loaded){ say(t('eLoadFirst')); return; }
+  /* Recording before the stored list arrives would be discarded the moment it
+     does, because loadAnns replaces W.items wholesale. */
+  if(CLOUD && !W.ready){ oops(t('eNotLoaded')); return; }
   var st=which();
   if(st==='start'){ W.draft.start=vid.currentTime; setCell(cStart,W.draft.start); say(''); cEnd.focus(); }
   else if(st==='end'){
@@ -1494,6 +1518,7 @@ function stamp(){
   }
 }
 function commit(){
+  if(CLOUD && !W.ready){ oops(t('eNotLoaded')); return; }
   var cap=cCap.value.trim();
   if(W.draft.start==null||W.draft.end==null){ say(t('eNeedTimes')); return; }
   if(!cap){ say(t('eNeedCap')); return; }

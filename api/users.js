@@ -1,4 +1,4 @@
-import { admin, currentUser, isAdmin, json } from './_lib.js';
+import { admin, currentUser, isAdmin, json, allRows } from './_lib.js';
 
 export default async function handler(req, res) {
   const me = await currentUser(req, res);
@@ -6,8 +6,8 @@ export default async function handler(req, res) {
   const db = admin();
 
   if (req.method === 'GET') {
-    const { data } = await db.from('users').select('*').order('name');
-    return json(res, 200, data || []);
+    const data = await allRows(() => db.from('users').select('*').order('name'));
+    return json(res, 200, data);
   }
 
   if (req.method === 'PATCH') {
