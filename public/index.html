@@ -328,7 +328,7 @@ ja:{
  capPh:'作業内容を入力', savedMsg:'保存しました', doneMsg:'完了にしました', eNoAnn:'アノテーションが1件もありません',
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
- overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
+ overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', loadingAnn:'記録を読み込んでいます…', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
  help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\nD F     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
@@ -377,7 +377,7 @@ en:{
  capPh:'Describe the work', savedMsg:'Saved', doneMsg:'Marked as done', eNoAnn:'There are no annotations yet',
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
- overlap:'Overlaps the previous segment', seekHere:'Click to seek here', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
+ overlap:'Overlaps the previous segment', seekHere:'Click to seek here', loadingAnn:'Loading records...', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
  help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\nD F     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
@@ -467,9 +467,21 @@ function wAnns(tid, items){
   (function run(){
     if(!(tid in annNext)){ annBusy[tid]=false; return; }
     var snap=annNext[tid]; delete annNext[tid];
-    api('anns?task=' + tid, {method:'PUT', body:{ items: snap }}).then(run, function(e){
-      cerr(e);
+    var base=(W.task && W.task.id===tid) ? W.base : null;
+    api('anns?task=' + tid, {method:'PUT', body:{ items: snap, base: base }}).then(function(r){
+      if(W.task && W.task.id===tid && r && typeof r.count==='number') W.base=r.count;
+      run();
+    }, function(e){
       annBusy[tid]=false;
+      if(e==='stale'){
+        /* The store moved under us - almost always a stale or short list here.
+           Reload rather than retry, so the newer stored rows win. */
+        delete annNext[tid];
+        oops(t('eStale'));
+        if(W.task && W.task.id===tid){ W.ready=false; loadAnns(tid); }
+        return;
+      }
+      cerr(e);
       annNext[tid]=snap;        /* keep it; the next edit retries */
       oops(t('eSaveFail'));     /* never let a failed save pass unnoticed */
     });
@@ -1335,13 +1347,20 @@ var cStart=$('cStart'), cEnd=$('cEnd'), cCap=$('cCap');
 function openTask(tid){
   var tk=null; DB.tasks.forEach(function(x){ if(x.id===tid) tk=x; });
   if(!tk) return;
-  W.task=tk; W.items=annOf(tid).slice(); W.draft={start:null,end:null}; W.loaded=false;
+  /* Never seed from the cached list. That cache is built by a bulk fetch, and
+     anything short or stale in it used to get written straight back over the
+     stored rows. The server is asked for this one task instead, and editing
+     stays disabled until that answer arrives. */
+  W.task=tk; W.items=[]; W.base=null; W.ready=false;
+  W.draft={start:null,end:null}; W.loaded=false;
   var vv=videoById(tk.videoId);
   $('wTitle').textContent=vv?vv.name:t('noVideoSet');
   $('wStatus').className='tag '+(tk.status==='done'?'ok':tk.status==='doing'?'warn':'mut');
   $('wStatus').textContent=(tk.status==='done'?t('dDone'):tk.status==='doing'?t('dDoing'):t('dTodo'));
   $('app').classList.add('hidden'); $('work').classList.remove('hidden');
   setCell(cStart,null); setCell(cEnd,null); cCap.value=''; say(''); renderRows();
+  if(!CLOUD){ W.items=annOf(tid).slice(); W.ready=true; renderRows(); segs(); }
+  else { say(t('loadingAnn')); loadAnns(tid); }
   vid.classList.add('hidden'); drop.classList.remove('hidden');
   drop.innerHTML=t('loadingV');
   if(vv){
@@ -1353,14 +1372,44 @@ function openTask(tid){
   } else { drop.innerHTML=t('dropHint'); W.loaded=false; }
   setTimeout(function(){ cStart.focus(); },50);
 }
-$('wBack').onclick=function(){ persist(); $('work').classList.add('hidden'); $('app').classList.remove('hidden'); render(); };
+$('wBack').onclick=function(){
+  /* No save here. Every edit already persists as it happens, and saving on the
+     way out is what pushed short lists over good stored rows. Clearing W.task
+     also lets the background refresh cover this task again. */
+  W.task=null; W.ready=false; W.items=[]; W.base=null;
+  $('work').classList.add('hidden'); $('app').classList.remove('hidden'); render();
+};
 $('wSave').onclick=function(){ persist(); flash(t('savedMsg')); };
 $('wDone').onclick=function(){
   if(!W.items.length){ say(t('eNoAnn')); return; }
   W.task.status='done'; persist(); flash(t('doneMsg'));
   $('wStatus').className='tag ok'; $('wStatus').textContent=t('dDone');
 };
-function persist(){ if(!W.task) return; DB.anns[W.task.id]=W.items.slice();
+/* Authoritative read for one task. W.base records how many rows the store held
+   at that moment; every save quotes it back so the server can refuse a write
+   built on a stale view. */
+function loadAnns(tid, then){
+  api('anns?task=' + tid).then(function(rows){
+    if(!W.task || W.task.id!==tid) return;
+    W.items=(rows||[]).map(function(a){
+      return { start:a.t_start, end:a.t_end, caption:a.caption||'', at:a.at }; });
+    W.base=W.items.length;
+    W.ready=true;
+    DB.anns[tid]=W.items.slice();
+    say(''); renderRows(); segs();
+    if(then) then();
+  }).catch(function(e){
+    cerr(e);
+    if(!W.task || W.task.id!==tid) return;
+    W.ready=false;                      /* editing stays locked out */
+    oops(t('eLoadFail'));
+  });
+}
+
+function persist(){ if(!W.task) return;
+  /* Refuse to write a list this session never successfully loaded. */
+  if(CLOUD && !W.ready){ oops(t('eNotLoaded')); return; }
+  DB.anns[W.task.id]=W.items.slice();
   if(W.task.status==='todo'&&W.items.length) W.task.status='doing';
   W.task.updated=Date.now();
   wAnns(W.task.id,W.items); wTask(W.task); save(); }

@@ -1,21 +1,42 @@
 import { admin, currentUser, isAdmin, json } from './_lib.js';
 
+// PostgREST caps a response at 1000 rows and gives no indication it truncated.
+// Reading annotations in one unpaged request silently dropped everything past
+// that ceiling once the library grew, so every read here pages to the end.
+async function allRows(db, build) {
+  const PAGE = 1000;
+  let from = 0, out = [];
+  for (;;) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    out = out.concat(data || []);
+    if (!data || data.length < PAGE) return out;
+    from += PAGE;
+  }
+}
+
 export default async function handler(req, res) {
   const me = await currentUser(req, res);
   if (!me) return;
   const db = admin();
   const taskId = req.query.task || (req.body || {}).task;
 
-  // No task given: return every annotation the caller may see, in one round
-  // trip. The client polls this every 5s, so per-task fetches did not scale.
+  // No task given: every annotation the caller may see, in one round trip.
   if (!taskId && req.method === 'GET') {
     let tq = db.from('tasks').select('id');
     if (!isAdmin(me)) tq = tq.eq('user_id', me.id);
     const { data: mine } = await tq;
     const ids = (mine || []).map((t) => t.id);
     if (!ids.length) return json(res, 200, []);
-    const { data } = await db.from('anns').select('*').in('task_id', ids).order('t_start');
-    return json(res, 200, data || []);
+    try {
+      const rows = await allRows(db, () =>
+        db.from('anns').select('*').in('task_id', ids).order('task_id').order('t_start'));
+      return json(res, 200, rows);
+    } catch (e) {
+      // Never answer 200 with a partial list: the client would cache it as the
+      // truth and a later save would write the gap back.
+      return json(res, 500, { error: String(e.message || e) });
+    }
   }
 
   if (!taskId) return json(res, 400, { error: 'task required' });
@@ -25,19 +46,36 @@ export default async function handler(req, res) {
   if (!isAdmin(me) && task.user_id !== me.id) return json(res, 403, { error: 'forbidden' });
 
   if (req.method === 'GET') {
-    const { data } = await db.from('anns').select('*').eq('task_id', taskId).order('t_start');
-    return json(res, 200, data || []);
+    try {
+      const rows = await allRows(db, () =>
+        db.from('anns').select('*').eq('task_id', taskId).order('t_start'));
+      return json(res, 200, rows);
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
   }
 
   if (req.method === 'PUT') {
-    // Whole-list replace, matching how the workspace persists a task.
-    // This used to DELETE then INSERT as two statements: anything failing in
-    // between wiped the annotator's work. replace_anns does both inside one
-    // transaction, so a failed insert rolls the delete back.
-    const items = (req.body || {}).items || [];
+    const body = req.body || {};
+    const items = body.items || [];
+
+    const { count: existing } = await db
+      .from('anns').select('id', { count: 'exact', head: true }).eq('task_id', taskId);
+
+    // Optimistic concurrency. `base` is how many rows the client had when it
+    // loaded this task. If the stored count has moved, the client is working
+    // from a stale or truncated view and its list must not overwrite the store.
+    // This is what makes a repeat of the truncation bug unable to destroy data.
+    if (body.base != null && Number(body.base) !== Number(existing || 0)) {
+      return json(res, 409, {
+        error: 'stale', base: Number(body.base), existing: Number(existing || 0),
+      });
+    }
+
+    // replace_anns does the delete and insert in one transaction, so a failed
+    // insert rolls the delete back rather than emptying the task.
     const { data: written, error } = await db.rpc('replace_anns', {
-      p_task: taskId,
-      p_items: items,
+      p_task: taskId, p_items: items,
     });
     if (error) return json(res, 500, { error: error.message });
 
@@ -45,6 +83,7 @@ export default async function handler(req, res) {
       updated: new Date().toISOString(),
       status: items.length && task.status === 'todo' ? 'doing' : task.status,
     }).eq('id', taskId);
+
     return json(res, 200, { ok: true, count: written });
   }
 
