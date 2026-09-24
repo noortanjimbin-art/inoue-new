@@ -328,7 +328,7 @@ ja:{
  capPh:'作業内容を入力', savedMsg:'保存しました', doneMsg:'完了にしました', eNoAnn:'アノテーションが1件もありません',
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
- overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', loadingAnn:'記録を読み込んでいます…', eExportFail:'最新の記録を取得できなかったため、書き出しを中止しました。不完全なファイルを作らないためです。通信状況を確認して再試行してください。', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
+ overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', loadingAnn:'記録を読み込んでいます…', eVideoReload:'動画の再読み込み中です…そのままお待ちください。', eVideoFail:'動画を読み込めませんでした。ページを再読み込みしてください。記録は保存済みです。', eExportFail:'最新の記録を取得できなかったため、書き出しを中止しました。不完全なファイルを作らないためです。通信状況を確認して再試行してください。', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
  help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\nD F     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
@@ -377,7 +377,7 @@ en:{
  capPh:'Describe the work', savedMsg:'Saved', doneMsg:'Marked as done', eNoAnn:'There are no annotations yet',
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
- overlap:'Overlaps the previous segment', seekHere:'Click to seek here', loadingAnn:'Loading records...', eExportFail:'Export cancelled: the latest records could not be fetched, and an incomplete file is worse than none. Check your connection and try again.', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
+ overlap:'Overlaps the previous segment', seekHere:'Click to seek here', loadingAnn:'Loading records...', eVideoReload:'Reloading the video - please wait.', eVideoFail:'Could not load the video. Reload the page; your records are saved.', eExportFail:'Export cancelled: the latest records could not be fetched, and an incomplete file is worse than none. Check your connection and try again.', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
  help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\nD F     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
@@ -635,14 +635,21 @@ function idbKeys(cb){
     }catch(e){ cb([]); }
   });
 }
+var FILEAT={};              /* when a signed playback URL was issued */
+var URL_TTL=45*60*1000;     /* refresh well inside the server's 6h signature */
 function ensureFile(vidId,cb){
-  if(FILES[vidId]) return cb(FILES[vidId]);
+  /* A signed URL is only good for a few hours, and a 45-minute video is days of
+     work. Reusing a cached one past its life is why playback dies mid-session
+     with no explanation. Local blob URLs have no FILEAT and never expire. */
+  var stale = FILEAT[vidId] && (Date.now()-FILEAT[vidId] > URL_TTL);
+  if(FILES[vidId] && !stale) return cb(FILES[vidId]);
+  if(stale) delete FILES[vidId];
   var v=videoById(vidId);
   if(CLOUD && v && v.assetId){
     /* A presigned R2 URL is handed straight to <video src>, so the browser makes
        its own Range requests to R2 and seeking works without a proxy. */
     return api('stream?json=1&key=' + encodeURIComponent(v.assetId)).then(function(r){
-      FILES[vidId]=r.url; cb(r.url);
+      FILES[vidId]=r.url; FILEAT[vidId]=Date.now(); cb(r.url);
     }).catch(function(){ cb(null); });
   }
   idbGet(vidId,function(blob){
@@ -1490,7 +1497,31 @@ vid.addEventListener('play',function(){ $('play').textContent=t('pause'); });
 vid.addEventListener('pause',function(){ $('play').textContent=t('play'); });
 vid.addEventListener('timeupdate',tick);
 vid.addEventListener('loadedmetadata',function(){ tick(); segs(); });
-vid.addEventListener('playing',function(){ measureFps(); });
+vid.addEventListener('playing',function(){ measureFps(); VIDRETRY={}; });
+
+/* There was no error handling on the video element at all: when a stream died
+   the annotator just saw a frozen or corrupted frame, kept working, and had no
+   idea playback had stopped being trustworthy. */
+var VIDRETRY={};
+function reloadVideo(){
+  if(!W.task) return;
+  var key=W.task.videoId, at=vid.currentTime||0;
+  VIDRETRY[key]=(VIDRETRY[key]||0)+1;
+  if(VIDRETRY[key]>3){ oops(t('eVideoFail')); return; }
+  delete FILES[key]; delete FILEAT[key];   /* force a fresh signature */
+  say(t('eVideoReload'));
+  ensureFile(key,function(url){
+    if(!url || !W.task || W.task.videoId!==key){ oops(t('eVideoFail')); return; }
+    attach(url);
+    var onMeta=function(){
+      vid.removeEventListener('loadedmetadata',onMeta);
+      try{ vid.currentTime=at; }catch(e){}   /* put them back where they were */
+      say('');
+    };
+    vid.addEventListener('loadedmetadata',onMeta);
+  });
+}
+vid.addEventListener('error',function(){ reloadVideo(); });
 $('bar').onclick=function(e){ if(!W.loaded||!vid.duration) return; var r=this.getBoundingClientRect(); vid.currentTime=(e.clientX-r.left)/r.width*vid.duration; };
 function tick(){ var d=vid.duration||0; $('fill').style.width=(d?vid.currentTime/d*100:0)+'%'; $('tc').textContent=fmt(vid.currentTime||0)+' / '+fmt(d); }
 function segs(){
