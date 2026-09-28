@@ -6,7 +6,28 @@ export default async function handler(req, res) {
   const db = admin();
   const taskId = req.query.task || (req.body || {}).task;
 
+  // Per-task aggregates for the task list. This exists because returning every
+  // annotation row on a 5-second poll is what exhausted the database's egress
+  // quota: ~1.4 MB per poll against ~3 KB for the same information.
+  if (!taskId && req.method === 'GET' && req.query.stats) {
+    try {
+      const mine = await allRows(() => {
+        let q = db.from('tasks').select('id').order('id');
+        if (!isAdmin(me)) q = q.eq('user_id', me.id);
+        return q;
+      });
+      const ids = mine.map((t) => t.id);
+      if (!ids.length) return json(res, 200, []);
+      const { data, error } = await db.rpc('ann_stats', { p_tasks: ids });
+      if (error) throw new Error(error.message);
+      return json(res, 200, data || []);
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
   // No task given: every annotation the caller may see, in one round trip.
+  // Only the export and an explicit refresh use this now.
   if (!taskId && req.method === 'GET') {
     try {
       // This lookup was itself unpaged: past 1000 tasks the id list would be cut

@@ -389,7 +389,7 @@ function t(k,vars){
 
 /* ================= storage ================= */
 var KEY='anno_platform_v3';
-var DB={users:[],videos:[],tasks:[],anns:{}};
+var DB={users:[],videos:[],tasks:[],anns:{},annStats:{}};
 function load(){
   try{ var raw=localStorage.getItem(KEY); if(raw) DB=JSON.parse(raw); }catch(e){}
   if(!DB||!DB.users||!DB.users.length) seed();
@@ -531,9 +531,10 @@ function pull(){
                status:x.status, created:x.created, updated:x.updated }; });
     if(me) DB.users.forEach(function(u){ if(u.id===me.id) me=u; });
 
-    /* One request for every annotation the caller can see. Fetching per task
-       meant 3+N requests every 5 seconds, which scaled straight into Vercel's
-       invocation limits once a few dozen tasks existed. */
+    /* Aggregates only. Pulling every annotation row on each poll cost roughly
+       a gigabyte an hour with a dashboard open, which is what tripped the
+       database's egress limit. Full rows are fetched per task when one is
+       opened, and for the export. */
     /* Only when a video we have never seen appears. */
     if(needThumbs){
       api('videos?thumbs=1').then(function(full){
@@ -543,17 +544,13 @@ function pull(){
       }).catch(function(){});
     }
 
-    return api('anns').then(function(rows){
-      var byTask={};
+    return api('anns?stats=1').then(function(rows){
+      var st={};
       (rows||[]).forEach(function(a){
-        (byTask[a.task_id] = byTask[a.task_id] || []).push(
-          { start:a.t_start, end:a.t_end, caption:a.caption||'', at:a.at });
+        st[a.task_id]={ n:a.n||0, secs:a.secs||0,
+                        last:a.last_at? Date.parse(a.last_at):0 };
       });
-      DB.tasks.forEach(function(x){
-        /* Skip the open task so a live edit is not clobbered by its own echo. */
-        if(W.task && W.task.id===x.id) return;
-        DB.anns[x.id] = byTask[x.id] || [];
-      });
+      DB.annStats=st;
     }).catch(function(){});
   }).then(refresh).catch(cerr);
 }
@@ -686,11 +683,19 @@ function isMine(x){
 
 /* --- derived state: everything below reads from real annotations --- */
 function tstats(x){
-  var a=annOf(x.id), secs=0, last=x.updated||0;
-  a.forEach(function(s){ secs+=Math.max(0,s.end-s.start); if(s.at&&s.at>last) last=s.at; });
+  /* Rows are only held for the open task and after an export refresh; the
+     poll supplies aggregates for everything else. */
+  var a=DB.anns[x.id], st=(DB.annStats||{})[x.id];
+  var n=0, secs=0, last=x.updated||0;
+  if(a){
+    n=a.length;
+    a.forEach(function(s){ secs+=Math.max(0,s.end-s.start); if(s.at&&s.at>last) last=s.at; });
+  } else if(st){
+    n=st.n; secs=st.secs; if(st.last>last) last=st.last;
+  }
   var v=videoById(x.videoId);
   var cov=(v&&v.dur)? Math.min(100,Math.round(secs/v.dur*100)) : 0;
-  return {n:a.length, secs:secs, cov:cov, last:last};
+  return {n:n, secs:secs, cov:cov, last:last};
 }
 function vstats(vid2){
   var ts=DB.tasks.filter(function(x){return x.videoId===vid2;});
@@ -902,7 +907,9 @@ function buildNav(){
     b.onclick=function(){ go(tb.id); }; n.appendChild(b);
   });
 }
+var exFresh=false;   /* have full rows been fetched since entering Export? */
 function go(tab){
+  if(tab!=='export') exFresh=false;
   cur=tab;
   var bs=$('nav').querySelectorAll('button');
   for(var i=0;i<bs.length;i++) bs[i].classList.toggle('on', bs[i].dataset.tab===tab);
@@ -950,7 +957,9 @@ function dataSig(){
   DB.users.forEach(function(u){ a.push('u'+u.id+u.role+u.name); });
   DB.videos.forEach(function(v){ a.push('v'+v.id+v.name+v.dur+v.size+(v.thumb?1:0)); });
   DB.tasks.forEach(function(x){ a.push('t'+x.id+x.videoId+x.userId+x.status+x.updated); });
-  Object.keys(DB.anns).sort().forEach(function(k){ a.push('a'+k+':'+DB.anns[k].length); });
+  var st=DB.annStats||{};
+  Object.keys(st).sort().forEach(function(k){ a.push('a'+k+':'+st[k].n+':'+st[k].secs); });
+  Object.keys(DB.anns).sort().forEach(function(k){ a.push('r'+k+':'+DB.anns[k].length); });
   return a.join('|');
 }
 
@@ -1283,7 +1292,12 @@ function wire(){
     DB.tasks.push(nt); wTask(nt); render();
   };
   if((el=$('exRefresh'))) el.onclick=function(){ withFreshAnns(exRender); };
-  if($('exVideo')){ $('exVideo').onchange=exRender; $('exUser').onchange=exRender; $('exStatus').onchange=exRender; exRender(); }
+  if($('exVideo')){
+    $('exVideo').onchange=exRender; $('exUser').onchange=exRender; $('exStatus').onchange=exRender;
+    /* The poll only carries aggregates now, so the Export tab pulls the real
+       rows once on entry rather than on every re-render. */
+    if(!exFresh){ exFresh=true; withFreshAnns(exRender); } else exRender();
+  }
   if((el=$('exJson'))) el.onclick=function(){ withFreshAnns(function(){
     var rows=exRows(),byV={};
     rows.forEach(function(r){ (byV[r.video]=byV[r.video]||[]).push({start_sec:r.start_sec,end_sec:r.end_sec,duration_sec:r.duration_sec,caption:r.caption,annotator:r.annotator}); });

@@ -105,3 +105,20 @@ end $$;
 revoke all on function inoue_new.replace_anns(uuid, jsonb) from public;
 revoke all on function inoue_new.replace_anns(uuid, jsonb) from anon, authenticated;
 grant execute on function inoue_new.replace_anns(uuid, jsonb) to service_role;
+
+-- Applied as migration `ann_stats_aggregate`.
+-- The task list needs only a count, covered-seconds sum and last-touched time
+-- per task. Computing those client-side meant refetching every annotation row
+-- on a 5-second poll, which exhausted the project's egress quota.
+create or replace function inoue_new.ann_stats(p_tasks uuid[])
+returns table(task_id uuid, n bigint, secs double precision, last_at timestamptz)
+language sql stable security definer set search_path = inoue_new, public
+as $$
+  select a.task_id, count(*)::bigint,
+         coalesce(sum(greatest(0, a.t_end - a.t_start)), 0)::double precision,
+         max(a.at)
+  from inoue_new.anns a where a.task_id = any(p_tasks) group by a.task_id
+$$;
+revoke all on function inoue_new.ann_stats(uuid[]) from public;
+revoke all on function inoue_new.ann_stats(uuid[]) from anon, authenticated;
+grant execute on function inoue_new.ann_stats(uuid[]) to service_role;
