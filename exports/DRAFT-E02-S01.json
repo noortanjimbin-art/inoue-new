@@ -1,0 +1,69 @@
+{
+  "export": {
+    "generated_at": "2026-09-30T00:00:00Z",
+    "source": "INOUEE annotation platform",
+    "schema_version": 1
+  },
+
+  "video": {
+    "name": "E02-S01.mp4",
+    "duration_sec": 7073.334,
+    "fps": 30,
+    "total_frames": 212200,
+    "assembled_from": 8,
+    "note": "Annotations were recorded against 8 separate part files. Times here are on the full-video timeline: each part's times were shifted by the summed true duration of all preceding parts. True durations came from the media files, not the database, which stores them rounded to whole seconds."
+  },
+
+  "parts": [
+    { "index": 1, "file": "E02-S01-1.mp4", "offset_sec": 0.000,    "duration_sec": 908.300, "frames": 27249, "annotator": "blakezhoie1104",   "status": "doing", "annotations": 249 },
+    { "index": 2, "file": "E02-S01-2.mp4", "offset_sec": 908.300,  "duration_sec": 900.000, "frames": 27000, "annotator": "irenevillanueva243","status": "doing", "annotations": 355 },
+    { "index": 3, "file": "E02-S01-3.mp4", "offset_sec": 1808.300, "duration_sec": 900.000, "frames": 27000, "annotator": "angelicaarroz622",  "status": "doing", "annotations": 421 },
+    { "index": 4, "file": "E02-S01-4.mp4", "offset_sec": 2708.300, "duration_sec": 897.767, "frames": 26933, "annotator": "infante3bobby",     "status": "done",  "annotations": 152 },
+    { "index": 5, "file": "E02-S01-5.mp4", "offset_sec": 3606.067, "duration_sec": 900.000, "frames": 27000, "annotator": "batausazoeamor18",  "status": "done",  "annotations": 399 },
+    { "index": 6, "file": "E02-S01-6.mp4", "offset_sec": 4506.067, "duration_sec": 900.000, "frames": 27000, "annotator": "sahakiopcam",       "status": "done",  "annotations": 329 },
+    { "index": 7, "file": "E02-S01-7.mp4", "offset_sec": 5406.067, "duration_sec": 900.000, "frames": 27000, "annotator": "ariadnedurilag537", "status": "doing", "annotations": 391 },
+    { "index": 8, "file": "E02-S01-8.mp4", "offset_sec": 6306.067, "duration_sec": 767.267, "frames": 23018, "annotator": "ariadnedurilag537", "status": "doing", "annotations": 302 }
+  ],
+
+  "annotation_count": 2598,
+
+  "annotations": [
+    {
+      "start_sec": 0.80, "end_sec": 3.50, "duration_sec": 2.70,
+      "start_frame": 24, "end_frame": 105,
+      "start_timecode": "00:00:00.800", "end_timecode": "00:00:03.500",
+      "caption": "<first annotation of part 1>",
+      "part": 1, "part_start_sec": 0.80, "part_end_sec": 3.50,
+      "annotator": "blakezhoie1104"
+    },
+
+    "…rows 2 through 249 of part 1…",
+
+    {
+      "start_sec": 906.76, "end_sec": 907.29, "duration_sec": 0.53,
+      "start_frame": 27203, "end_frame": 27219,
+      "start_timecode": "00:15:06.760", "end_timecode": "00:15:07.290",
+      "caption": "Left hand repositions the  micro pipette tip rack",
+      "part": 1, "part_start_sec": 906.76, "part_end_sec": 907.29,
+      "annotator": "blakezhoie1104"
+    },
+    {
+      "start_sec": 916.81, "end_sec": 918.18, "duration_sec": 1.37,
+      "start_frame": 27504, "end_frame": 27545,
+      "start_timecode": "00:15:16.810", "end_timecode": "00:15:18.180",
+      "caption": "Right hand holds the small beaker",
+      "part": 2, "part_start_sec": 8.51, "part_end_sec": 9.88,
+      "annotator": "irenevillanueva243"
+    },
+    {
+      "start_sec": 917.02, "end_sec": 920.55, "duration_sec": 3.53,
+      "start_frame": 27510, "end_frame": 27616,
+      "start_timecode": "00:15:17.020", "end_timecode": "00:15:20.550",
+      "caption": "Left hand holds the small beaker",
+      "part": 2, "part_start_sec": 8.72, "part_end_sec": 12.25,
+      "annotator": "irenevillanueva243"
+    },
+
+    "…remaining rows, sorted by start_sec across all 8 parts…"
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "export": {
+    "generated_at": "2026-09-30T00:00:00Z",
+    "source": "INOUEE annotation platform",
+    "schema_version": 2
+  },
+  "video": {
+    "name": "E02-S01.mp4",
+    "duration_sec": 7073.333,
+    "duration_timecode": "01:57:53.333",
+    "fps": 30,
+    "total_frames": 212200,
+    "part_count": 8
+  },
+  "annotators": [
+    { "name": "Annalyn Rose Lomoljo", "email": "blakezhoie1104@gmail.com",    "parts": [1], "annotations": 249 },
+    { "name": "Irene Villanueva",     "email": "irenevillanueva243@gmail.com","parts": [2], "annotations": 355 },
+    { "name": "Angelica Arroz",       "email": "angelicaarroz622@gmail.com",  "parts": [3], "annotations": 421 },
+    { "name": "Bobby Infante",        "email": "infante3bobby@gmail.com",     "parts": [4], "annotations": 152 },
+    { "name": "carmela batausa",      "email": "batausazoeamor18@gmail.com",  "parts": [5], "annotations": 399 },
+    { "name": "Kia Deocampo",         "email": "sahakiopcam@gmail.com",       "parts": [6], "annotations": 329 },
+    { "name": "Ariadne",              "email": "ariadnedurilag537@gmail.com", "parts": [7, 8], "annotations": 693 }
+  ],
+  "parts": [
+    { "index": 1, "file": "E02-S01-1.mp4", "offset_sec": 0.000,    "offset_timecode": "00:00:00.000", "offset_frame": 0,      "duration_sec": 908.300, "duration_timecode": "00:15:08.300", "frames": 27249, "annotator": "blakezhoie1104@gmail.com",    "status": "doing", "annotations": 249 },
+    { "index": 2, "file": "E02-S01-2.mp4", "offset_sec": 908.300,  "offset_timecode": "00:15:08.300", "offset_frame": 27249,  "duration_sec": 900.000, "duration_timecode": "00:15:00.000", "frames": 27000, "annotator": "irenevillanueva243@gmail.com","status": "doing", "annotations": 355 },
+    { "index": 3, "file": "E02-S01-3.mp4", "offset_sec": 1808.300, "offset_timecode": "00:30:08.300", "offset_frame": 54249,  "duration_sec": 900.000, "duration_timecode": "00:15:00.000", "frames": 27000, "annotator": "angelicaarroz622@gmail.com",  "status": "doing", "annotations": 421 },
+    { "index": 4, "file": "E02-S01-4.mp4", "offset_sec": 2708.300, "offset_timecode": "00:45:08.300", "offset_frame": 81249,  "duration_sec": 897.767, "duration_timecode": "00:14:57.767", "frames": 26933, "annotator": "infante3bobby@gmail.com",     "status": "done",  "annotations": 152 },
+    { "index": 5, "file": "E02-S01-5.mp4", "offset_sec": 3606.067, "offset_timecode": "01:00:06.067", "offset_frame": 108182, "duration_sec": 900.000, "duration_timecode": "00:15:00.000", "frames": 27000, "annotator": "batausazoeamor18@gmail.com",  "status": "done",  "annotations": 399 },
+    { "index": 6, "file": "E02-S01-6.mp4", "offset_sec": 4506.067, "offset_timecode": "01:15:06.067", "offset_frame": 135182, "duration_sec": 900.000, "duration_timecode": "00:15:00.000", "frames": 27000, "annotator": "sahakiopcam@gmail.com",       "status": "done",  "annotations": 329 },
+    { "index": 7, "file": "E02-S01-7.mp4", "offset_sec": 5406.067, "offset_timecode": "01:30:06.067", "offset_frame": 162182, "duration_sec": 900.000, "duration_timecode": "00:15:00.000", "frames": 27000, "annotator": "ariadnedurilag537@gmail.com", "status": "doing", "annotations": 391 },
+    { "index": 8, "file": "E02-S01-8.mp4", "offset_sec": 6306.067, "offset_timecode": "01:45:06.067", "offset_frame": 189182, "duration_sec": 767.267, "duration_timecode": "00:12:47.267", "frames": 23018, "annotator": "ariadnedurilag537@gmail.com", "status": "doing", "annotations": 302 }
+  ],
+  "annotation_count": 2598,
+  "annotations": [
+    {
+      "start_sec": 0.799, "end_sec": 1.508, "duration_sec": 0.709,
+      "start_timecode": "00:00:00.799", "end_timecode": "00:00:01.508",
+      "start_frame": 24, "end_frame": 45,
+      "caption": "Right hand repositions the paper",
+      "part": 1, "part_start_sec": 0.799, "part_end_sec": 1.508,
+      "annotator": "blakezhoie1104@gmail.com"
+    },
+    {
+      "start_sec": 1.523, "end_sec": 5.211, "duration_sec": 3.688,
+      "start_timecode": "00:00:01.523", "end_timecode": "00:00:05.211",
+      "start_frame": 46, "end_frame": 156,
+      "caption": "Left hand presses the tare button of the precision balance",
+      "part": 1, "part_start_sec": 1.523, "part_end_sec": 5.211,
+      "annotator": "blakezhoie1104@gmail.com"
+    },
+    {
+      "start_sec": 2708.300, "end_sec": 2720.642, "duration_sec": 12.342,
+      "start_timecode": "00:45:08.300", "end_timecode": "00:45:20.642",
+      "start_frame": 81249, "end_frame": 81619,
+      "caption": "right hand  pour liquid from beaker into the measuring cylinder",
+      "part": 4, "part_start_sec": 0.000, "part_end_sec": 12.342,
+      "annotator": "infante3bobby@gmail.com"
+    },
+    {
+      "start_sec": 4506.067, "end_sec": 4509.567, "duration_sec": 3.500,
+      "start_timecode": "01:15:06.067", "end_timecode": "01:15:09.567",
+      "start_frame": 135182, "end_frame": 135287,
+      "caption": "Right hand holds the micro spatula",
+      "part": 6, "part_start_sec": 0.000, "part_end_sec": 3.500,
+      "annotator": "sahakiopcam@gmail.com"
+    },
+    {
+      "start_sec": 7064.566, "end_sec": 7065.975, "duration_sec": 1.409,
+      "start_timecode": "01:57:44.566", "end_timecode": "01:57:45.975",
+      "start_frame": 211937, "end_frame": 211979,
+      "caption": "right hand place the pens on the paper",
+      "part": 8, "part_start_sec": 758.499, "part_end_sec": 759.908,
+      "annotator": "ariadnedurilag537@gmail.com"
+    }
+  ]
+}

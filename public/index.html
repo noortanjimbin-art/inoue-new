@@ -1144,6 +1144,16 @@ function withFreshAnns(cb){
   }).catch(function(e){ cerr(e); alert(t('eExportFail')); });
 }
 
+/* Exports identify an annotator by display name only. Addresses must never
+   reach an exported file, including the local part that _lib.js falls back to
+   when an account has no name set. */
+function annName(u){
+  if(!u) return '';
+  var n=String(u.name||'').trim();
+  if(!n || n.indexOf('@')>=0) return '';
+  return n;
+}
+
 function exRows(){
   var vf=$('exVideo')?$('exVideo').value:'',uf=$('exUser')?$('exUser').value:'',sf=$('exStatus')?$('exStatus').value:'';
   var out=[];
@@ -1151,7 +1161,7 @@ function exRows(){
     if(vf&&x.videoId!==vf) return; if(uf&&x.userId!==uf) return; if(sf&&x.status!==sf) return;
     var v=videoById(x.videoId),u=userById(x.userId);
     annOf(x.id).forEach(function(a){
-      out.push({video:v?v.name:'',annotator:u?u.name:'',start_sec:+a.start.toFixed(3),end_sec:+a.end.toFixed(3),
+      out.push({video:v?v.name:'',annotator:annName(u),start_sec:+a.start.toFixed(3),end_sec:+a.end.toFixed(3),
                 duration_sec:+(a.end-a.start).toFixed(3),caption:a.caption});
     });
   });
