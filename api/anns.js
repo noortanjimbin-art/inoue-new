@@ -70,6 +70,19 @@ export default async function handler(req, res) {
     const body = req.body || {};
     const items = body.items || [];
 
+    // Reject unusable times outright. replace_anns skips any row whose start or
+    // end is null, and a NaN from a client serialises to null - so without this
+    // a bad time edit would delete the annotation silently instead of failing.
+    if (!Array.isArray(items)) return json(res, 400, { error: 'bad_items' });
+    for (let k = 0; k < items.length; k++) {
+      const it = items[k] || {};
+      const s = it.start, e = it.end;
+      if (typeof s !== 'number' || typeof e !== 'number' ||
+          !Number.isFinite(s) || !Number.isFinite(e) || s < 0 || e < s) {
+        return json(res, 400, { error: 'bad_item', index: k });
+      }
+    }
+
     const { count: existing } = await db
       .from('anns').select('id', { count: 'exact', head: true }).eq('task_id', taskId);
 

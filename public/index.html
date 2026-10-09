@@ -105,6 +105,8 @@ tr:last-child td{border-bottom:none}
 .capedit:focus{border-color:var(--accent);background:var(--surface);outline:none;
   text-overflow:clip}
 .capedit::placeholder{color:var(--text-3)}
+/* recorded start/end: look like plain text until engaged, monospace like before */
+.timeedit{font-family:var(--mono);padding:3px 4px;text-overflow:clip}
 .empty{text-align:center;color:var(--text-3);font-size:13px;padding:28px 10px}
 .rowform{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
 .rowform>div{flex:1;min-width:150px}
@@ -335,7 +337,7 @@ ja:{
  capPh:'作業内容を入力', savedMsg:'保存しました', doneMsg:'完了にしました', eNoAnn:'アノテーションが1件もありません',
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
- overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', chQA:'QA', ovTag:'重なり', ovCount:'重なり {n}件', ovTip:'同じ手で同じ時間帯に別の動作が記録されています：', loadingAnn:'記録を読み込んでいます…', eCorruptUp:'アップロードを中止しました：{f} のデータが途中から空になっています。クラウド同期フォルダ（Google ドライブ / OneDrive）のファイルが完全にダウンロードされていない場合によく起こります。ファイルをローカルに保存し、最後まで再生できることを確認してからもう一度アップロードしてください。', eVideoReload:'動画の再読み込み中です…そのままお待ちください。', eVideoFail:'動画を読み込めませんでした。ページを再読み込みしてください。記録は保存済みです。', eExportFail:'最新の記録を取得できなかったため、書き出しを中止しました。不完全なファイルを作らないためです。通信状況を確認して再試行してください。', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
+ overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', editTime:'クリックして時刻を編集（例：1:02.50 または 62.5）。Enterで確定、Escで取り消し', eTimeFormat:'時刻の形式が正しくありません。例：1:02.50 または 62.5', eTimeOrder:'終了時刻は開始時刻より後にしてください（1フレーム以上）', eTimePastEnd:'動画の長さ（{d}）を超えています', timeSaved:'時刻を更新して保存しました', chQA:'QA', ovTag:'重なり', ovCount:'重なり {n}件', ovTip:'同じ手で同じ時間帯に別の動作が記録されています：', loadingAnn:'記録を読み込んでいます…', eCorruptUp:'アップロードを中止しました：{f} のデータが途中から空になっています。クラウド同期フォルダ（Google ドライブ / OneDrive）のファイルが完全にダウンロードされていない場合によく起こります。ファイルをローカルに保存し、最後まで再生できることを確認してからもう一度アップロードしてください。', eVideoReload:'動画の再読み込み中です…そのままお待ちください。', eVideoFail:'動画を読み込めませんでした。ページを再読み込みしてください。記録は保存済みです。', eExportFail:'最新の記録を取得できなかったため、書き出しを中止しました。不完全なファイルを作らないためです。通信状況を確認して再試行してください。', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
  help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\nD F     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
@@ -384,7 +386,7 @@ en:{
  capPh:'Describe the work', savedMsg:'Saved', doneMsg:'Marked as done', eNoAnn:'There are no annotations yet',
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
- overlap:'Overlaps the previous segment', seekHere:'Click to seek here', chQA:'QA', ovTag:'Overlap', ovCount:'{n} overlaps', ovTip:'The same hand has another action recorded at the same time:', loadingAnn:'Loading records...', eCorruptUp:'Upload rejected: {f} is empty past a certain point. This usually means the file is a cloud-sync placeholder (Google Drive / OneDrive) that was never fully downloaded. Save it locally, check it plays to the end, then upload again.', eVideoReload:'Reloading the video - please wait.', eVideoFail:'Could not load the video. Reload the page; your records are saved.', eExportFail:'Export cancelled: the latest records could not be fetched, and an incomplete file is worse than none. Check your connection and try again.', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
+ overlap:'Overlaps the previous segment', seekHere:'Click to seek here', editTime:'Click to edit the time (e.g. 1:02.50 or 62.5). Enter to apply, Esc to cancel', eTimeFormat:'Time not recognised. Use e.g. 1:02.50 or 62.5', eTimeOrder:'The end must be after the start (by at least one frame)', eTimePastEnd:'That is past the end of the video ({d})', timeSaved:'Time updated and saved', chQA:'QA', ovTag:'Overlap', ovCount:'{n} overlaps', ovTip:'The same hand has another action recorded at the same time:', loadingAnn:'Loading records...', eCorruptUp:'Upload rejected: {f} is empty past a certain point. This usually means the file is a cloud-sync placeholder (Google Drive / OneDrive) that was never fully downloaded. Save it locally, check it plays to the end, then upload again.', eVideoReload:'Reloading the video - please wait.', eVideoFail:'Could not load the video. Reload the page; your records are saved.', eExportFail:'Export cancelled: the latest records could not be fetched, and an incomplete file is worse than none. Check your connection and try again.', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
  help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\nD F     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
@@ -1643,6 +1645,79 @@ function sameHandOverlaps(items){
   return out;
 }
 
+/* Read a typed time. Accepts 62.5 / 1:02.5 / 1:02:03.25, a comma as the decimal
+   mark, and full-width digits typed through a Japanese IME. Returns seconds, or
+   null for anything it cannot read - never NaN, because NaN serialises to null
+   and the database would drop that annotation on save. */
+function parseTime(str){
+  var raw=String(str==null?'':str), s='';
+  for(var i=0;i<raw.length;i++){
+    var c=raw.charCodeAt(i);
+    if(c>=0xFF10 && c<=0xFF19) s+=String.fromCharCode(c-0xFF10+48);   /* full-width 0-9 */
+    else if(c===0xFF0E || c===0x3002) s+='.';                          /* full-width . */
+    else if(c===0xFF1A) s+=':';                                        /* full-width : */
+    else s+=raw.charAt(i);
+  }
+  s=s.trim().replace(/,/g,'.');
+  if(!s || !/^[0-9:.]+$/.test(s)) return null;
+  var parts=s.split(':');
+  if(parts.length>3) return null;
+  var total=0;
+  for(var k=0;k<parts.length;k++){
+    var part=parts[k], last=(k===parts.length-1);
+    if(part==='' || (!last && part.indexOf('.')>=0)) return null;
+    if((part.match(/[.]/g)||[]).length>1) return null;
+    var v=parseFloat(part);
+    if(!isFinite(v)) return null;
+    if(k>0 && v>=60) return null;          /* 1:75 is not a time */
+    total=total*60+v;
+  }
+  return isFinite(total) ? Math.round(total*1000)/1000 : null;
+}
+
+var MIN_SPAN=1/30;   /* one frame */
+
+/* Apply a typed start or end to one recorded annotation. Returns true when the
+   value changed and was accepted. Rejected input is reverted on screen and the
+   stored value is left exactly as it was. */
+function editTime(it, field, input){
+  var before=it[field];
+  var typed=input.value.trim();
+  /* Untouched field: keep the stored full-precision value rather than replacing
+     it with the two-decimal text on screen. */
+  if(typed===fmt(before)){ input.value=fmt(before); return false; }
+  var v=parseTime(typed), err=null;
+  var dur=(vid && isFinite(vid.duration) && vid.duration>0) ? vid.duration : 0;
+  if(v===null) err=t('eTimeFormat');
+  else{
+    var ns=field==='start'? v : it.start, ne=field==='end'? v : it.end;
+    if(dur && ne>dur+0.001) err=t('eTimePastEnd',{d:fmt(dur)});
+    else if(ne-ns<MIN_SPAN) err=t('eTimeOrder');
+  }
+  if(err){ oops(err); input.value=fmt(before); return false; }
+  if(v===before) return false;
+  it[field]=v;
+  W.items.sort(function(a,b){ return (a.start-b.start)||(a.end-b.end); });
+  return true;
+}
+
+/* A time edit re-renders the list (the row may move), which would otherwise drop
+   the cursor the user just tabbed into. */
+function refocusAfterRender(){
+  var rf=W.refocus; W.refocus=null;
+  if(!rf) return;
+  var els=$('rows').querySelectorAll('input');
+  for(var k=0;k<els.length;k++){
+    if(els[k]._item===rf.item && els[k].getAttribute('data-f')===rf.field){
+      els[k].focus(); if(els[k].select) els[k].select(); return;
+    }
+  }
+}
+function noteNextFocus(e){
+  var nx=e && e.relatedTarget;
+  W.refocus=(nx && nx._item) ? {item:nx._item, field:nx.getAttribute('data-f')} : null;
+}
+
 function renderRows(){
   var qa=!!(me && me.role==='admin');
   $('work').classList.toggle('qa', qa);
@@ -1660,10 +1735,34 @@ function renderRows(){
     var row=document.createElement('div');
     row.className='arow cols lcols'+(ov.length?' qaflag':'');
     row.title=t('seekHere');
-    var a=document.createElement('div'); a.className='t'; a.textContent=fmt(it.start);
-    var b=document.createElement('div'); b.className='t'; b.textContent=fmt(it.end);
+    /* Start and end are editable, e.g. 17.21 -> 17.16. Focusing one moves the video
+       to that moment so the frame can be checked before changing it. */
+    function timeCell(field){
+      var el=document.createElement('input');
+      el.type='text'; el.className='capedit timeedit'; el.value=fmt(it[field]);
+      el.title=t('editTime'); el.setAttribute('data-f',field); el._item=it;
+      el.setAttribute('inputmode','decimal'); el.setAttribute('autocomplete','off');
+      el.onclick=function(e){ e.stopPropagation(); };
+      el.onfocus=function(){ if(W.loaded && isFinite(it[field])) vid.currentTime=it[field]; };
+      el.onkeydown=function(e){
+        e.stopPropagation();
+        if(e.key==='Enter'){ e.preventDefault(); el.blur(); }
+        else if(e.key==='Escape'){ e.preventDefault(); el.value=fmt(it[field]); el.blur(); }
+      };
+      el.onblur=function(e){
+        if(!editTime(it, field, el)) return;
+        noteNextFocus(e);
+        renderRows(); segs(); persist();
+        refocusAfterRender();
+        flash(t('timeSaved'));
+      };
+      return el;
+    }
+    var a=timeCell('start');
+    var b=timeCell('end');
     var c=document.createElement('input');
     c.type='text'; c.className='capedit'; c.value=it.caption;
+    c.setAttribute('data-f','cap'); c._item=it;
     c.title=it.caption||t('editCap'); c.placeholder=t('capEmpty');
     /* the row seeks the video on click, which must not fire while placing a cursor */
     c.onclick=function(e){ e.stopPropagation(); };
