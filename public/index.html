@@ -166,6 +166,13 @@ tr:last-child td{border-bottom:none}
 .arow{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-size:12px;margin-bottom:6px;cursor:pointer}
 .arow.bad{border-color:var(--danger)}
 .arow .t{font-family:var(--mono)}
+/* QA column: admins only. Nothing here is saved or exported. */
+.qaonly{display:none}
+.qa .qaonly{display:block}
+.qa .lcols{grid-template-columns:78px 78px 58px minmax(0,1fr) 26px}
+.arow.qaflag{border-color:var(--warn)}
+.ovtag{display:inline-block;font-size:10.5px;line-height:1;padding:4px 7px;border-radius:999px;
+  background:var(--warn);color:#fff;font-weight:600;white-space:nowrap;cursor:help}
 .iconbtn{border:none;background:none;color:var(--text-3);font-size:15px;line-height:1;padding:2px 4px;cursor:pointer}
 .iconbtn:hover{color:var(--danger);background:none}
 .draft{background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;padding:12px;flex-shrink:0}
@@ -256,7 +263,7 @@ tr:last-child td{border-bottom:none}
     <div class="right">
       <div class="lpanel">
         <div class="lhead"><span id="lblRecorded"></span><span id="count" class="muted" style="font-weight:400">0</span></div>
-        <div class="cols colhead"><div id="chS"></div><div id="chE"></div><div id="chC"></div><div></div></div>
+        <div class="cols colhead lcols"><div id="chS"></div><div id="chE"></div><div id="chQ" class="qaonly"></div><div id="chC"></div><div></div></div>
         <div class="scroll"><div id="rows"></div></div>
       </div>
       <div class="draft">
@@ -328,7 +335,7 @@ ja:{
  capPh:'作業内容を入力', savedMsg:'保存しました', doneMsg:'完了にしました', eNoAnn:'アノテーションが1件もありません',
  eLoadFirst:'先に動画を読み込んでください', eStartFirst:'先に開始時間を記録してください', eOrder:'終了時間は開始時間より後にしてください',
  eNeedTimes:'開始時間と終了時間を記録してください', eNeedCap:'作業内容を入力してください',
- overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', loadingAnn:'記録を読み込んでいます…', eCorruptUp:'アップロードを中止しました：{f} のデータが途中から空になっています。クラウド同期フォルダ（Google ドライブ / OneDrive）のファイルが完全にダウンロードされていない場合によく起こります。ファイルをローカルに保存し、最後まで再生できることを確認してからもう一度アップロードしてください。', eVideoReload:'動画の再読み込み中です…そのままお待ちください。', eVideoFail:'動画を読み込めませんでした。ページを再読み込みしてください。記録は保存済みです。', eExportFail:'最新の記録を取得できなかったため、書き出しを中止しました。不完全なファイルを作らないためです。通信状況を確認して再試行してください。', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
+ overlap:'前の区間と重なっています', seekHere:'クリックで頭出し', chQA:'QA', ovTag:'重なり', ovCount:'重なり {n}件', ovTip:'同じ手で同じ時間帯に別の動作が記録されています：', loadingAnn:'記録を読み込んでいます…', eCorruptUp:'アップロードを中止しました：{f} のデータが途中から空になっています。クラウド同期フォルダ（Google ドライブ / OneDrive）のファイルが完全にダウンロードされていない場合によく起こります。ファイルをローカルに保存し、最後まで再生できることを確認してからもう一度アップロードしてください。', eVideoReload:'動画の再読み込み中です…そのままお待ちください。', eVideoFail:'動画を読み込めませんでした。ページを再読み込みしてください。記録は保存済みです。', eExportFail:'最新の記録を取得できなかったため、書き出しを中止しました。不完全なファイルを作らないためです。通信状況を確認して再試行してください。', eLoadFail:'記録を読み込めませんでした。再読み込みしてからやり直してください（この状態では保存できません）。', eNotLoaded:'記録がまだ読み込まれていないため保存できません。', eStale:'サーバー側の記録が変更されています。最新の内容を読み込み直しました。', eSaveFail:'保存に失敗しました。通信状況を確認してください。編集内容はこの画面に残っています。', editCap:'クリックして作業内容を編集', capEmpty:'作業内容を入力', capSaved:'作業内容を保存しました', noVideoSet:'（動画なし）', deleted:'（削除済み）',
  help:'ショートカット\n\nSpace   再生 / 停止\n← →     1秒 巻き戻し / 送り\nD F     1コマ 戻る / 進む\nEnter   開始 → 終了 → 作業内容 → 登録\nDelete  セルを削除\nEsc     作業内容の入力を抜ける\n\n作業内容の入力中は Space と ← → は文字入力になります。'
 },
 en:{
@@ -377,7 +384,7 @@ en:{
  capPh:'Describe the work', savedMsg:'Saved', doneMsg:'Marked as done', eNoAnn:'There are no annotations yet',
  eLoadFirst:'Load a video first', eStartFirst:'Record the start time first', eOrder:'End time must be after the start time',
  eNeedTimes:'Record both a start and an end time', eNeedCap:'Enter a work description',
- overlap:'Overlaps the previous segment', seekHere:'Click to seek here', loadingAnn:'Loading records...', eCorruptUp:'Upload rejected: {f} is empty past a certain point. This usually means the file is a cloud-sync placeholder (Google Drive / OneDrive) that was never fully downloaded. Save it locally, check it plays to the end, then upload again.', eVideoReload:'Reloading the video - please wait.', eVideoFail:'Could not load the video. Reload the page; your records are saved.', eExportFail:'Export cancelled: the latest records could not be fetched, and an incomplete file is worse than none. Check your connection and try again.', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
+ overlap:'Overlaps the previous segment', seekHere:'Click to seek here', chQA:'QA', ovTag:'Overlap', ovCount:'{n} overlaps', ovTip:'The same hand has another action recorded at the same time:', loadingAnn:'Loading records...', eCorruptUp:'Upload rejected: {f} is empty past a certain point. This usually means the file is a cloud-sync placeholder (Google Drive / OneDrive) that was never fully downloaded. Save it locally, check it plays to the end, then upload again.', eVideoReload:'Reloading the video - please wait.', eVideoFail:'Could not load the video. Reload the page; your records are saved.', eExportFail:'Export cancelled: the latest records could not be fetched, and an incomplete file is worse than none. Check your connection and try again.', eLoadFail:'Could not load the records. Reload the page and try again - saving is disabled until then.', eNotLoaded:'Cannot save: the records have not loaded yet.', eStale:'The stored records had changed. The latest version has been reloaded.', eSaveFail:'Save failed. Check your connection - your edits are still on screen.', editCap:'Click to edit the description', capEmpty:'Describe the work', capSaved:'Description saved', noVideoSet:'(no video)', deleted:'(deleted)',
  help:'Shortcuts\n\nSpace   Play / pause\n← →     Back / forward 1s\nD F     Previous / next frame\nEnter   Start → End → Description → Save\nDelete  Clear the focused cell\nEsc     Leave the description field\n\nWhile typing a description, Space and ← → type text instead.'
 }};
 var lang='ja';
@@ -881,7 +888,7 @@ function applyLang(){
   $('wPick').textContent=t('wReplace'); $('wSave').textContent=t('wSave'); $('wDone').textContent=t('wDone');
   $('play').textContent=(vid&&!vid.paused&&W.loaded)?t('pause'):t('play');
   $('lblRecorded').textContent=t('recordedList');
-  $('chS').textContent=t('cStart'); $('chE').textContent=t('cEnd'); $('chC').textContent=t('cCaption');
+  $('chS').textContent=t('cStart'); $('chE').textContent=t('cEnd'); $('chC').textContent=t('cCaption'); $('chQ').textContent=t('chQA');
   $('dhS').textContent=t('startT'); $('dhE').textContent=t('endT'); $('dhC').textContent=t('cCaption');
   $('cCap').placeholder=t('capPh');
   if(!W.loaded) $('drop').innerHTML=t('dropHint');
@@ -1599,15 +1606,60 @@ function clearCell(){
   else if(st==='end'){ W.draft.end=null; setCell(cEnd,null); say(''); }
   else if(st==='cap'){ cCap.value=''; say(''); }
 }
+/* Same-hand overlap, for QA review only.
+
+   Both hands are annotated, so a left-hand span overlapping a right-hand span
+   is normal and is not flagged. What QA needs to see is one hand doing two
+   different things at once - e.g. "right hand holds the pen" across 30-35s and
+   "right hand moves the tweezers" across 32-34s. Spans that merely touch
+   within one frame are back-to-back stamps, not conflicts.
+
+   Computed on screen only: never saved, never in an export. */
+var QA_EPS=1/30;
+function handsOf(c){
+  var w=String(c||'').trim().toLowerCase().split(' ').filter(Boolean);
+  if(w.length<2) return '';
+  var h=w[1].replace(/[^a-z]/g,'');
+  if(h!=='hand' && h!=='hands') return '';
+  return w[0]==='both' ? 'LR' : w[0]==='left' ? 'L' : w[0]==='right' ? 'R' : '';
+}
+function sameHandOverlaps(items){
+  var out=items.map(function(){ return []; });
+  var ord=items.map(function(_,i){ return i; })
+               .sort(function(p,q){ return items[p].start-items[q].start; });
+  for(var a=0;a<ord.length;a++){
+    var i=ord[a], x=items[i], hx=handsOf(x.caption);
+    if(!hx) continue;
+    for(var b=a+1;b<ord.length;b++){
+      var j=ord[b], y=items[j];
+      if(y.start>=x.end-QA_EPS) break;          /* sorted: nothing later can overlap x */
+      var hy=handsOf(y.caption);
+      if(!hy) continue;
+      var shared=(hx.indexOf('L')>=0 && hy.indexOf('L')>=0) ||
+                 (hx.indexOf('R')>=0 && hy.indexOf('R')>=0);
+      if(shared && Math.min(x.end,y.end)-y.start>QA_EPS){ out[i].push(y); out[j].push(x); }
+    }
+  }
+  return out;
+}
+
 function renderRows(){
-  $('count').textContent=W.items.length;
+  var qa=!!(me && me.role==='admin');
+  $('work').classList.toggle('qa', qa);
+  var OV=qa ? sameHandOverlaps(W.items) : [];
+  var nOv=0; OV.forEach(function(o){ if(o.length) nOv++; });
+  $('count').textContent=W.items.length + (qa && nOv ? '  ·  '+t('ovCount',{n:nOv}) : '');
   var box=$('rows');
   if(!W.items.length){ box.innerHTML='<div class="empty">'+t('noRecords')+'</div>'; return; }
   box.innerHTML='';
   W.items.forEach(function(it,i){
-    var prev=W.items[i-1],overlap=prev&&it.start<prev.end;
-    var row=document.createElement('div'); row.className='arow cols'+(overlap?' bad':'');
-    row.title=overlap?t('overlap'):t('seekHere');
+    /* The old check flagged any overlap with the row above, regardless of hand,
+       so every legitimate left/right pair was outlined. Replaced by the
+       same-hand check below. */
+    var ov=qa ? OV[i] : [];
+    var row=document.createElement('div');
+    row.className='arow cols lcols'+(ov.length?' qaflag':'');
+    row.title=t('seekHere');
     var a=document.createElement('div'); a.className='t'; a.textContent=fmt(it.start);
     var b=document.createElement('div'); b.className='t'; b.textContent=fmt(it.end);
     var c=document.createElement('input');
@@ -1629,7 +1681,18 @@ function renderRows(){
     };
     var x=document.createElement('button'); x.className='iconbtn'; x.innerHTML='×';
     x.onclick=function(e){ e.stopPropagation(); W.items.splice(i,1); renderRows(); segs(); persist(); };
-    row.appendChild(a); row.appendChild(b); row.appendChild(c); row.appendChild(x);
+    row.appendChild(a); row.appendChild(b);
+    if(qa){
+      var q=document.createElement('div');
+      if(ov.length){
+        var tag=document.createElement('span'); tag.className='ovtag'; tag.textContent=t('ovTag');
+        tag.title=t('ovTip')+String.fromCharCode(10)+ov.map(function(o){
+          return fmt(o.start)+' - '+fmt(o.end)+'   '+o.caption; }).join(String.fromCharCode(10));
+        q.appendChild(tag);
+      }
+      row.appendChild(q);
+    }
+    row.appendChild(c); row.appendChild(x);
     row.onclick=function(){ if(W.loaded) vid.currentTime=it.start; };
     box.appendChild(row);
   });
