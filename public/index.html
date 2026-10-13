@@ -300,7 +300,7 @@ ja:{
  logout:'ログアウト', langBtn:'🌐 English',
  dashSub:'プロジェクト全体の進捗', totalTasks:'タスク総数', doneRate:'完了率', segCount:'アノテーション数', segTime:'アノテーション総時間',
  dDone:'完了', dDoing:'作業中', dTodo:'未着手', ofTasks:'全{n}タスク中 {d}件', recSeg:'記録された作業区間', sumLen:'区間の合計長',
- byAnnotator:'アノテーター別の進捗', byVideo:'動画別の進捗', recent:'直近のアノテーション',
+ byAnnotator:'アノテーター別の進捗', byVideo:'動画別の進捗', recent:'直近の保存',
  statusBd:'タスクの状況', byTask:'タスク別の進捗', cov:'カバー率', avgCov:'平均カバー率',
  annTime:'アノテーション時間', lastUp:'最終更新', none:'—', covNote:'動画の長さに対する記録済み区間の割合',
  noMembers:'メンバーがいません', noVideos:'動画がありません', noRecords:'まだ記録がありません', noTasks:'タスクがありません', noTasksFor:'{e} に割り当てられたタスクはまだありません。管理者にご確認ください。',
@@ -349,7 +349,7 @@ en:{
  logout:'Sign out', langBtn:'🌐 日本語',
  dashSub:'Overall project progress', totalTasks:'Tasks', doneRate:'Completion', segCount:'Annotations', segTime:'Annotated time',
  dDone:'Done', dDoing:'In progress', dTodo:'Not started', ofTasks:'{d} of {n} tasks', recSeg:'Recorded work segments', sumLen:'Total segment length',
- byAnnotator:'Progress by annotator', byVideo:'Progress by video', recent:'Recent annotations',
+ byAnnotator:'Progress by annotator', byVideo:'Progress by video', recent:'Recently saved',
  statusBd:'Task status', byTask:'Progress by task', cov:'Coverage', avgCov:'Average coverage',
  annTime:'Annotated time', lastUp:'Last updated', none:'—', covNote:'Share of the video length covered by recorded segments',
  noMembers:'No members yet', noVideos:'No videos yet', noRecords:'Nothing recorded yet', noTasks:'No tasks yet', noTasksFor:'No tasks are assigned to {e} yet. Please check with your admin.',
@@ -559,7 +559,7 @@ function pull(){
         st[a.task_id]={ n:a.n||0, secs:a.secs||0,
                         last:a.last_at? Date.parse(a.last_at):0 };
       });
-      DB.annStats=st;
+      DB.annStats=st; DB.annStatsAt=Date.now();
     }).catch(function(){});
   }).then(refresh).catch(cerr);
 }
@@ -692,15 +692,23 @@ function isMine(x){
 
 /* --- derived state: everything below reads from real annotations --- */
 function tstats(x){
-  /* Rows are only held for the open task and after an export refresh; the
-     poll supplies aggregates for everything else. */
-  var a=DB.anns[x.id], st=(DB.annStats||{})[x.id];
-  var n=0, secs=0, last=x.updated||0;
-  if(a){
-    n=a.length;
-    a.forEach(function(s){ secs+=Math.max(0,s.end-s.start); if(s.at&&s.at>last) last=s.at; });
-  } else if(st){
-    n=st.n; secs=st.secs; if(st.last>last) last=st.last;
+  /* Where each task's numbers come from:
+     - the task open in the editor: its live list, which is newer than any poll;
+     - every other task: the aggregate the 5-second poll fetches.
+     DB.anns is NOT used here. It is a snapshot taken when a task is opened or the
+     Export tab is visited, and nothing refreshes it - preferring it froze counts
+     in whoever's browser had taken the snapshot while annotators kept revising.
+     It is only used when there is no server at all (offline preview). */
+  var n=0, secs=0, last=x.updated||0, rows=null;
+  if(W.task && W.task.id===x.id && W.ready) rows=W.items;
+  else if(!(CLOUD && DB.annStatsAt)) rows=DB.anns[x.id]||[];
+  if(rows){
+    n=rows.length;
+    rows.forEach(function(s){ secs+=Math.max(0,s.end-s.start); if(s.at&&s.at>last) last=s.at; });
+  } else {
+    /* the aggregate omits tasks with no rows at all: absent means zero, not unknown */
+    var st=DB.annStats[x.id];
+    if(st){ n=st.n; secs=st.secs; if(st.last>last) last=st.last; }
   }
   var v=videoById(x.videoId);
   var cov=(v&&v.dur)? Math.min(100,Math.round(secs/v.dur*100)) : 0;
@@ -1048,18 +1056,19 @@ function viewDash(){
 
   /* recent */
   h+='<div class="panel"><h3>'+t('recent')+'</h3>';
-  var recent=[];
-  DB.tasks.forEach(function(x){ annOf(x.id).forEach(function(a){ recent.push({t:x,a:a}); }); });
-  recent.sort(function(p,q){ return (q.a.at||0)-(p.a.at||0); });
-  recent=recent.slice(0,8);
+  /* Built from the polled task list, not from the row snapshot cache, which is
+     never refreshed and showed stale rows. Row timestamps are rewritten on every
+     save, so "latest annotation" was never meaningful; the latest save is. */
+  var recent=DB.tasks.filter(function(x){ return tstats(x).n>0; })
+                     .sort(function(a,b){ return tstats(b).last-tstats(a).last; }).slice(0,8);
   if(!recent.length) h+='<div class="empty">'+t('noRecords')+'</div>';
   else{
-    h+='<table><thead><tr><th>'+t('cVideo')+'</th><th style="width:120px">'+t('cAssignee')+'</th><th style="width:80px">'+t('cStart')+'</th><th style="width:80px">'+t('cEnd')+'</th><th>'+t('cCaption')+'</th><th style="width:90px">'+t('lastUp')+'</th></tr></thead><tbody>';
-    recent.forEach(function(r){
-      var v=videoById(r.t.videoId),u=userById(r.t.userId);
-      h+='<tr><td class="muted ell" style="max-width:170px">'+esc(v?v.name:'-')+'</td><td>'+esc(u?u.name:'-')+'</td>'+
-         '<td class="mono">'+fmt(r.a.start)+'</td><td class="mono">'+fmt(r.a.end)+'</td><td>'+esc(r.a.caption)+'</td>'+
-         '<td class="muted" style="font-size:11px">'+ago(r.a.at)+'</td></tr>';
+    h+='<table><thead><tr><th>'+t('cVideo')+'</th><th style="width:120px">'+t('cAssignee')+'</th><th style="width:110px">'+t('cStatus')+'</th><th style="width:80px">'+t('cSegs')+'</th><th style="width:100px">'+t('lastUp')+'</th></tr></thead><tbody>';
+    recent.forEach(function(x){
+      var v=videoById(x.videoId),u=userById(x.userId),st=tstats(x);
+      h+='<tr><td class="muted ell" style="max-width:230px">'+esc(v?v.name:'-')+'</td><td>'+esc(u?u.name:'-')+'</td>'+
+         '<td>'+statusTag(x.status)+'</td><td class="mono">'+st.n+'</td>'+
+         '<td class="muted" style="font-size:11px">'+ago(st.last)+'</td></tr>';
     });
     h+='</tbody></table>';
   }
@@ -1444,6 +1453,7 @@ function openTask(tid){
   setTimeout(function(){ cStart.focus(); },50);
 }
 $('wBack').onclick=function(){
+  pull();   /* refresh totals now so the list reflects this task's last save */
   /* No save here. Every edit already persists as it happens, and saving on the
      way out is what pushed short lists over good stored rows. Clearing W.task
      also lets the background refresh cover this task again. */

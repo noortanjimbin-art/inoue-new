@@ -40,15 +40,42 @@ export const json = (res, status, body) => res.status(status).json(body);
 // a slow one: the client caches it as the truth. This is what cost a day of
 // annotation work when only the annotations read was capped.
 export async function allRows(build) {
+  // Pages are only consistent if the order is total. Sorting by start time alone
+  // leaves rows with the same start (left and right hand together) free to swap
+  // between page requests, so one could be returned twice and another never -
+  // and a save of that list would write the duplicate back and lose the other.
+  // id is unique, so appending it makes the order total.
+  //
+  // A save can still land between two page requests. Every save rewrites ALL of
+  // a task's rows in one statement, with fresh ids and a single shared `at`
+  // stamp, so new ids never collide with old ones - a repeated id cannot detect
+  // it. A task whose rows carry two different stamps can: that list is half one
+  // save and half the next. Start over.
   const PAGE = 1000;
-  let from = 0, out = [];
-  for (;;) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    out = out.concat(data || []);
-    if (!data || data.length < PAGE) return out;
-    from += PAGE;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let from = 0, out = [], torn = false;
+    const seen = new Set(), stamp = new Map();
+    for (;;) {
+      const { data, error } = await build().order('id').range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      for (const row of data || []) {
+        if (row.id !== undefined) {
+          if (seen.has(row.id)) torn = true;
+          seen.add(row.id);
+        }
+        if (row.task_id !== undefined && row.at !== undefined) {
+          const prev = stamp.get(row.task_id);
+          if (prev === undefined) stamp.set(row.task_id, row.at);
+          else if (prev !== row.at) torn = true;
+        }
+        out.push(row);
+      }
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+    if (!torn) return out;
   }
+  throw new Error('rows kept changing while being read; try again');
 }
 
 // Resolves the caller's Supabase session to their row in `users`, creating it on
