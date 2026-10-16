@@ -1172,6 +1172,24 @@ function annName(u){
   return n;
 }
 
+/* JSON export: one entry per video, with the client's work-step outline for that
+   video first (verbatim, one array item per line) and the annotation segments
+   after it. Videos without an outline get no work_steps key. */
+function buildJsonExport(rows, ws){
+  var steps=(ws && ws.videos) || {}, byV={}, order=[];
+  rows.forEach(function(r){
+    if(!byV[r.video]){ byV[r.video]=[]; order.push(r.video); }
+    byV[r.video].push({start_sec:r.start_sec,end_sec:r.end_sec,duration_sec:r.duration_sec,
+                       caption:r.caption,annotator:r.annotator});
+  });
+  return {exported_at:new Date().toISOString(), videos:order.map(function(k){
+    var e={video:k};
+    if(steps[k] && steps[k].length) e.work_steps=steps[k].slice();
+    e.segments=byV[k];
+    return e;
+  })};
+}
+
 function exRows(){
   var vf=$('exVideo')?$('exVideo').value:'',uf=$('exUser')?$('exUser').value:'',sf=$('exStatus')?$('exStatus').value:'';
   var out=[];
@@ -1327,11 +1345,13 @@ function wire(){
     if(!exFresh){ exFresh=true; withFreshAnns(exRender); } else exRender();
   }
   if((el=$('exJson'))) el.onclick=function(){ withFreshAnns(function(){
-    var rows=exRows(),byV={};
-    rows.forEach(function(r){ (byV[r.video]=byV[r.video]||[]).push({start_sec:r.start_sec,end_sec:r.end_sec,duration_sec:r.duration_sec,caption:r.caption,annotator:r.annotator}); });
-    dl('annotations.json',JSON.stringify({exported_at:new Date().toISOString(),
-      videos:Object.keys(byV).map(function(k){return {video:k,segments:byV[k]};})},null,2),'application/json');
-    exRender();
+    /* The outlines are fetched at export time. If they cannot be read the export
+       is abandoned rather than written without them. */
+    var got=CLOUD ? api('worksteps') : Promise.resolve({videos:{}});
+    got.then(function(ws){
+      dl('annotations.json',JSON.stringify(buildJsonExport(exRows(),ws),null,2),'application/json');
+      exRender();
+    }).catch(function(e){ cerr(e); alert(t('eExportFail')); });
   }); };
   if((el=$('exCsv'))) el.onclick=function(){ withFreshAnns(function(){
     function q(s){ return '"'+String(s).replace(/"/g,'""')+'"'; }
