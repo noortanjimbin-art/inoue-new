@@ -81,7 +81,8 @@ for idx, fname, foff, _ in PARTS:
     r = roster.setdefault(who, {'name': who, 'parts': [], 'annotations': 0})
     r['parts'].append(idx); r['annotations'] += len(anns)
 
-rows.sort(key=lambda r: (r['start_sec'], r['end_sec']))
+# caption breaks ties between left/right pairs sharing exact times (same rule as the tool)
+rows.sort(key=lambda r: (r['start_sec'], r['end_sec'], r['caption']))
 total_frames = sum(FRAMES.values())
 
 # The client's work-step outline for the whole video, verbatim, from the bundle
