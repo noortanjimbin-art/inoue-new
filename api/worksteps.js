@@ -18,9 +18,10 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'private, no-store');
     return json(res, 200, data);
   } catch (e) {
-    // No outlines uploaded yet is a valid state, not an error.
+    // A missing bundle is an error, not "no outlines": an empty answer here would
+    // let exports go out without the work steps and nobody would notice.
     if (e && (e.name === 'NoSuchKey' || (e.$metadata && e.$metadata.httpStatusCode === 404))) {
-      return json(res, 200, { version: 1, videos: {} });
+      return json(res, 500, { error: 'work steps not found in storage (' + WORKSTEPS_KEY + ')' });
     }
     // Anything else must fail the export rather than silently drop the outlines.
     return json(res, 500, { error: String((e && e.message) || e) });

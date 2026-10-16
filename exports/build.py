@@ -93,6 +93,7 @@ WORK_STEPS = _ws.get('videos', {}).get('E02-S01.mp4') or _ws.get('unmatched', {}
 assert WORK_STEPS, 'no E02-S01 outline in the bundle'
 
 doc = {
+    'work_steps': WORK_STEPS,
     'export': {
         'generated_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'source': 'INOUEE annotation platform',
@@ -104,7 +105,6 @@ doc = {
         'duration_timecode': tc(total_frames / FPS),
         'fps': 30, 'total_frames': total_frames, 'part_count': 8,
     },
-    'work_steps': WORK_STEPS,
     'annotators': sorted(roster.values(), key=lambda a: a['parts'][0]),
     'parts': part_meta,
     'annotation_count': len(rows),
