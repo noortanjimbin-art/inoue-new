@@ -84,6 +84,13 @@ for idx, fname, foff, _ in PARTS:
 rows.sort(key=lambda r: (r['start_sec'], r['end_sec']))
 total_frames = sum(FRAMES.values())
 
+# The client's work-step outline for the whole video, verbatim, from the bundle
+# kept in R2 (notes/work_steps.json; pass a local copy via WORKSTEPS). Its times
+# are on the full-video timeline, the same timeline as the annotations below.
+_ws = json.load(io.open(os.environ['WORKSTEPS'], encoding='utf-8'))
+WORK_STEPS = _ws.get('videos', {}).get('E02-S01.mp4') or _ws.get('unmatched', {}).get('E02-S01')
+assert WORK_STEPS, 'no E02-S01 outline in the bundle'
+
 doc = {
     'export': {
         'generated_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
@@ -96,6 +103,7 @@ doc = {
         'duration_timecode': tc(total_frames / FPS),
         'fps': 30, 'total_frames': total_frames, 'part_count': 8,
     },
+    'work_steps': WORK_STEPS,
     'annotators': sorted(roster.values(), key=lambda a: a['parts'][0]),
     'parts': part_meta,
     'annotation_count': len(rows),
